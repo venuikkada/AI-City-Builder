@@ -1,0 +1,21 @@
+{
+  "name": "ai-city-builder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Describe your dream city, let AI plan the missions and buildings, then build it and manage money, traffic and population.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.130.0",
+    "zod": "^4.6.5"
+  }
+}

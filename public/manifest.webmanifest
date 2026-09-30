@@ -1,0 +1,10 @@
+{
+  "name": "AI City Builder",
+  "short_name": "City Builder",
+  "description": "Describe your dream city. AI plans it. You build it.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

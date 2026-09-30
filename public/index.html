@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>AI City Builder — describe it, AI plans it, you build it</title>
+    <meta name="description" content="Describe your dream city — like “Build a futuristic Hyderabad” — and AI designs its buildings, landmarks and missions. Then build it and manage money, traffic and population." />
+    <meta property="og:title" content="AI City Builder" />
+    <meta property="og:description" content="Describe your dream city. AI plans it. You build it." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#0d1117" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app" data-screen="start">
+      <section class="screen start" id="screen-start">
+        <div class="start-skyline" aria-hidden="true"></div>
+        <main class="start-card">
+          <div class="brand"><span class="brand-mark">🏙️</span> AI City Builder</div>
+          <h1 class="hero">Describe your dream city.<br /><span class="accent">AI plans it. You build it.</span></h1>
+          <p class="sub">
+            A real city reimagined, a fantasy town, a car-free utopia — type anything. The AI designs the buildings, landmarks and missions.
+            You lay the roads and manage money, traffic and population.
+          </p>
+          <form id="prompt-form" class="prompt-form" autocomplete="off">
+            <label class="sr-only" for="prompt-input">Describe your city</label>
+            <textarea id="prompt-input" name="prompt" rows="3" maxlength="300" placeholder="Build a futuristic Hyderabad."></textarea>
+            <div class="chips" id="prompt-chips" aria-label="Example ideas"></div>
+            <div class="form-row">
+              <fieldset class="difficulty">
+                <legend class="sr-only">Difficulty</legend>
+                <label><input type="radio" name="difficulty" value="relaxed" /> <span>Relaxed</span></label>
+                <label><input type="radio" name="difficulty" value="normal" checked /> <span>Normal</span></label>
+                <label><input type="radio" name="difficulty" value="hard" /> <span>Hard</span></label>
+              </fieldset>
+              <button class="btn btn-primary btn-lg" type="submit">✨ Generate my city</button>
+            </div>
+          </form>
+          <div class="start-footer">
+            <span id="ai-status" class="ai-status">Checking AI…</span>
+            <button id="continue-btn" class="btn btn-ghost" type="button" hidden></button>
+          </div>
+        </main>
+      </section>
+
+      <section class="screen loading" id="screen-loading" hidden>
+        <div class="loader-card">
+          <div class="crane" aria-hidden="true"><span>🏗️</span></div>
+          <h2 id="loading-title">Designing your city…</h2>
+          <p id="loading-line" class="loading-line" aria-live="polite"></p>
+          <button id="loading-skip" class="btn btn-ghost" type="button" hidden>Skip — use the quick offline planner</button>
+        </div>
+      </section>
+
+      <section class="screen reveal" id="screen-reveal" hidden>
+        <div class="reveal-card">
+          <div class="reveal-head">
+            <div class="badges"><span class="badge" id="reveal-source"></span><span class="badge" id="reveal-style"></span></div>
+            <h1 id="reveal-name"></h1>
+            <p class="tagline" id="reveal-tagline"></p>
+            <p class="vision" id="reveal-vision"></p>
+            <p class="notice" id="reveal-notice" hidden></p>
+          </div>
+          <div class="reveal-grid">
+            <section>
+              <h3>Landmarks</h3>
+              <ul class="landmark-list" id="reveal-landmarks"></ul>
+            </section>
+            <section>
+              <h3>Missions</h3>
+              <ol class="mission-preview" id="reveal-missions"></ol>
+            </section>
+            <section class="wide">
+              <h3>Your building palette</h3>
+              <ul class="building-chips" id="reveal-buildings"></ul>
+            </section>
+          </div>
+          <div class="reveal-actions">
+            <button class="btn btn-ghost" id="reveal-back" type="button">← Change idea</button>
+            <button class="btn btn-ghost" id="reveal-regen" type="button">🎲 Regenerate</button>
+            <button class="btn btn-primary btn-lg" id="reveal-start" type="button">Start building →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen game" id="screen-game" hidden>
+        <header class="hud">
+          <div class="hud-city">
+            <div class="city-name" id="hud-name"></div>
+            <div class="city-sub"><span id="hud-milestone"></span> · <span id="hud-date"></span></div>
+          </div>
+          <div class="hud-stats">
+            <button class="stat" id="stat-money" type="button" title="Treasury and monthly profit — click for the budget">
+              <span class="stat-icon">💰</span><span class="stat-value" id="hud-money"></span><span class="stat-delta" id="hud-net"></span>
+            </button>
+            <div class="stat" title="Population"><span class="stat-icon">👥</span><span class="stat-value" id="hud-pop"></span></div>
+            <div class="stat" title="Jobs"><span class="stat-icon">💼</span><span class="stat-value" id="hud-jobs"></span></div>
+            <div class="stat" title="Happiness"><span class="stat-icon" id="hud-happy-icon">🙂</span><span class="stat-value" id="hud-happy"></span></div>
+            <div class="stat stat-traffic" title="Traffic congestion"><span class="stat-icon">🚗</span><span class="stat-value" id="hud-traffic"></span></div>
+          </div>
+          <div class="hud-controls">
+            <div class="speed" role="group" aria-label="Game speed">
+              <button type="button" data-speed="0" title="Pause (Space)">⏸</button>
+              <button type="button" data-speed="1" title="Normal speed (1)">▶</button>
+              <button type="button" data-speed="2" title="Fast (2)">⏩</button>
+              <button type="button" data-speed="3" title="Fastest (3)">⏭</button>
+            </div>
+            <button class="icon-btn" id="btn-snapshot" type="button" title="Save a shareable snapshot">📸</button>
+            <button class="icon-btn" id="btn-menu" type="button" title="Menu">☰</button>
+          </div>
+        </header>
+        <div class="game-body">
+          <nav class="toolbar" id="toolbar" aria-label="Build tools"></nav>
+          <div class="viewport" id="viewport">
+            <canvas id="city-canvas" aria-label="City map"></canvas>
+            <div class="tooltip" id="tooltip" hidden></div>
+            <div class="toasts" id="toasts" aria-live="polite"></div>
+            <div class="overlay-bar" id="overlay-bar" role="group" aria-label="Map overlays">
+              <button type="button" data-overlay="traffic">🚦 Traffic</button>
+              <button type="button" data-overlay="happiness">😊 Happiness</button>
+              <button type="button" data-overlay="pollution">🏭 Pollution</button>
+              <button type="button" data-overlay="services">🏥 Services</button>
+              <button type="button" data-overlay="transit">🚇 Transit</button>
+            </div>
+            <button class="sheet-toggle" id="sheet-toggle" type="button">📋 Missions</button>
+          </div>
+          <aside class="sidebar" id="sidebar">
+            <div class="inspector" id="inspector" hidden></div>
+            <div class="tabs" role="tablist">
+              <button type="button" role="tab" data-tab="missions" class="active" aria-selected="true">🏆 Missions</button>
+              <button type="button" role="tab" data-tab="advisor" aria-selected="false">💬 Advisor</button>
+              <button type="button" role="tab" data-tab="budget" aria-selected="false">📊 Budget</button>
+            </div>
+            <div class="tab-panel" id="panel-missions" role="tabpanel"></div>
+            <div class="tab-panel" id="panel-advisor" role="tabpanel" hidden></div>
+            <div class="tab-panel" id="panel-budget" role="tabpanel" hidden></div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <dialog id="dialog" class="dialog">
+      <form method="dialog" class="dialog-form">
+        <h2 id="dialog-title"></h2>
+        <div id="dialog-body" class="dialog-body"></div>
+        <div id="dialog-actions" class="dialog-actions"></div>
+      </form>
+    </dialog>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
