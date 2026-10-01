@@ -46,10 +46,7 @@ function showScreen(name) {
   app.screen = name;
   for (const s of ['start', 'loading', 'reveal', 'game']) $(`screen-${s}`).hidden = s !== name;
   document.getElementById('app').dataset.screen = name;
-  if (name === 'game') {
-    renderer.resize();
-    renderer.fitToMap();
-  }
+  if (name === 'game') renderer.resize();
 }
 
 function loadSave() {
@@ -129,10 +126,12 @@ async function generatePlan(prompt) {
     const result = await requestPlan(prompt, { signal: app.abort.signal });
     app.pending = { prompt, ...result };
     ui.renderReveal(result.plan, result);
+    // The offline planner is deterministic, so only AI plans can be re-rolled.
+    $('reveal-regen').hidden = result.source !== 'ai';
     showScreen('reveal');
   } catch (err) {
     showScreen('start');
-    toast(err.message || 'Something went wrong', 'warn');
+    $('ai-status').textContent = `⚠️ ${err.message || 'Something went wrong — please try again.'}`;
   } finally {
     clearInterval(app.loadingTimer);
   }
@@ -225,12 +224,15 @@ function tick() {
   if (report.milestone) toast(`🎉 ${game.plan.cityName} is now a ${report.milestone.title}!`, 'success', 5000);
   for (const w of report.warnings) toast(`⚠️ ${w}`, 'warn', 5000);
   if (report.unlocked.length) rebuildToolbar();
-  if (!game.missions.some((m) => m.status !== 'done') && !app.advisorBusy) askAdvisor();
+  // Out of missions? Quietly ask the advisor for more (respecting the cooldown).
+  if (!game.missions.some((m) => m.status !== 'done') && !app.advisorBusy && Date.now() >= app.advisorReadyAt) askAdvisor();
   if (game.month % 6 === 0) saveGame();
   app.uiDirty = true;
 }
 
 function frame(now) {
+  // Schedule first so an unexpected error in one frame can't stop the game.
+  requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - (app.lastFrame || now)) / 1000);
   app.lastFrame = now;
   if (app.screen === 'game' && app.game) {
@@ -249,7 +251,6 @@ function frame(now) {
     if (app.uiDirty) refreshUi();
     renderer.render(dt, getAnalysis(app.game));
   }
-  requestAnimationFrame(frame);
 }
 
 // --- building actions ------------------------------------------------------
@@ -534,6 +535,9 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('beforeunload', () => saveGame());
 
+
+// `?debug` exposes the app state for troubleshooting and end-to-end tests.
+if (new URLSearchParams(location.search).has('debug')) window.aicb = { app, renderer, getAnalysis };
 
 initStart();
 requestAnimationFrame(frame);

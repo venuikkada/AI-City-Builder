@@ -245,9 +245,11 @@ export function analyzeCity(state) {
   for (const b of residential) {
     if (b.active) desirableHousing += b.def.residents * desirability(happinessTile[b.i]);
   }
+  // What the player should build next: homes when jobs sit empty (or there is
+  // barely any housing yet), jobs when residents can't find work.
   const demand = {
-    homes: clamp((supported - desirableHousing) / Math.max(200, desirableHousing), 0, 1),
-    jobs: clamp((desirableHousing - supported) / Math.max(200, supported), 0, 1),
+    homes: Math.max(clamp((jobs - labor) / Math.max(100, jobs), 0, 1), clamp(1 - housing / BASE_SETTLERS, 0, 1)),
+    jobs: clamp((labor - jobs) / Math.max(100, labor), 0, 1),
   };
 
   return {

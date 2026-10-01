@@ -35,6 +35,11 @@ export function el(tag, attrs = {}, ...children) {
 
 export const $ = (id) => document.getElementById(id);
 
+/** replaceChildren that skips null/false entries (used for optional sections). */
+export function setChildren(node, ...children) {
+  node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+}
+
 /** One-line gameplay summary of a building definition. */
 export function statsLine(def, currency) {
   const parts = [`${formatMoney(def.cost, currency)}`];
@@ -64,7 +69,7 @@ export const EXAMPLE_PROMPTS = [
 ];
 
 export function renderChips(container, onPick) {
-  container.replaceChildren(
+  setChildren(container,
     ...EXAMPLE_PROMPTS.map((p) => el('button', { type: 'button', class: 'chip', onclick: () => onPick(p) }, p)),
   );
 }
@@ -85,7 +90,7 @@ export function renderReveal(plan, meta) {
         'li',
         { class: 'landmark' },
         el('span', { class: 'landmark-icon' }, l.icon),
-        el('div', {}, el('strong', {}, l.name), el('p', {}, l.description), el('small', {}, `${l.effect} · unlocks at ${formatNumber(l.unlockPopulation)} people`)),
+        el('div', {}, el('strong', {}, l.name), el('p', {}, l.description), el('small', {}, `${l.effect[0].toUpperCase()}${l.effect.slice(1)} · unlocks at ${formatNumber(l.unlockPopulation)} people`)),
       ),
     ),
   );
@@ -135,14 +140,14 @@ export function buildToolbar(container, game, handlers) {
   const showInfo = (id) => {
     const def = game.defs[id];
     if (!def) {
-      info.replaceChildren(
+      setChildren(info,
         el('strong', {}, id === 'bulldoze' ? 'Bulldoze' : 'Inspect'),
         el('p', {}, id === 'bulldoze' ? 'Drag to clear buildings, roads or trees. Same-month demolitions refund half the cost.' : 'Drag to move the map, click a tile to see details. Right-drag always pans.'),
       );
       return;
     }
     const locked = (def.unlock || 0) > game.maxPop;
-    info.replaceChildren(
+    setChildren(info,
       el('strong', {}, `${def.icon} ${def.name}`),
       el('p', {}, def.description),
       el('small', {}, statsLine(def, currency)),
@@ -178,7 +183,7 @@ export function buildToolbar(container, game, handlers) {
       el('button', { type: 'button', class: 'tool tool-invent', onclick: handlers.onInvent }, el('span', { class: 'tool-icon' }, '💡'), el('span', { class: 'tool-text' }, el('span', { class: 'tool-name' }, 'Invent a building'), el('span', { class: 'tool-sub' }, 'Describe it, AI designs it'))),
     ),
   );
-  container.replaceChildren(el('div', { class: 'tool-scroll' }, ...groups), info);
+  setChildren(container, el('div', { class: 'tool-scroll' }, ...groups), info);
   showInfo('inspect');
 
   return {
@@ -255,7 +260,8 @@ export function renderMissions(container, game, a, { advisorBusy, onAsk }) {
     );
   });
   const advisorName = game.plan.advisorName;
-  container.replaceChildren(
+  const completedOpen = Boolean(container.querySelector('details.done-list')?.open);
+  setChildren(container,
     el('div', { class: 'panel-head' }, el('h3', {}, 'Missions'), el('span', { class: 'muted' }, `${done.length} done${queued.length ? ` · ${queued.length} queued` : ''}`)),
     ...(cards.length ? cards : [el('p', { class: 'empty' }, 'All missions complete! Ask your advisor for more.')]),
     el(
@@ -266,7 +272,7 @@ export function renderMissions(container, game, a, { advisorBusy, onAsk }) {
     done.length
       ? el(
           'details',
-          { class: 'done-list' },
+          { class: 'done-list', open: completedOpen },
           el('summary', {}, `Completed (${done.length})`),
           el('ul', {}, ...done.slice().reverse().map((m) => el('li', {}, `✅ ${m.title} `, el('span', { class: 'muted' }, `+${formatMoney(m.reward, currency)}`)))),
         )
@@ -279,7 +285,7 @@ export function renderMissions(container, game, a, { advisorBusy, onAsk }) {
 export function renderAdvisor(container, game, tips, advice) {
   const news = game.log.slice(-14).reverse();
   const icons = { mission: '🏆', event: '⚡', unlock: '🔓', milestone: '🎉', warning: '⚠️', advisor: '💬' };
-  container.replaceChildren(
+  setChildren(container,
     el(
       'div',
       { class: 'advisor-card' },
@@ -295,7 +301,7 @@ export function renderAdvisor(container, game, tips, advice) {
 
 // --- budget ----------------------------------------------------------------
 
-function sparkline(canvas, values, color) {
+function sparkline(canvas, values, color, fromZero) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = canvas.clientWidth || 240;
   const h = canvas.clientHeight || 48;
@@ -305,8 +311,8 @@ function sparkline(canvas, values, color) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
   if (values.length < 2) return;
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 1);
+  const min = fromZero ? Math.min(0, ...values) : Math.min(...values);
+  const max = Math.max(...values, min + 1);
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -321,51 +327,69 @@ function sparkline(canvas, values, color) {
 
 export function renderBudget(container, game, a, { onTax }) {
   const c = game.plan.currency;
-  const b = a.budget;
-  const row = (label, value, cls = '') => el('tr', { class: cls }, el('td', {}, label), el('td', { class: 'num' }, formatSignedMoney(value, c)));
-  const tax = el('input', { type: 'range', min: 0, max: 20, step: 1, value: game.taxRate, id: 'tax-slider', 'aria-label': 'Tax rate' });
-  const taxOut = el('output', { for: 'tax-slider' }, `${game.taxRate}%`);
-  tax.addEventListener('input', () => {
-    taxOut.textContent = `${tax.value}%`;
-    onTax(Number(tax.value));
-  });
-  const demandBar = (label, v, cls) => {
-    const fill = el('div', { class: `bar ${cls}` });
-    fill.style.width = `${Math.round(v * 100)}%`;
-    return el('div', { class: 'demand-row' }, el('span', {}, label), el('div', { class: 'progress' }, fill));
-  };
-  const popChart = el('canvas', { class: 'spark', 'aria-label': 'Population history' });
-  const moneyChart = el('canvas', { class: 'spark', 'aria-label': 'Treasury history' });
-  container.replaceChildren(
-    el('div', { class: 'panel-head' }, el('h3', {}, 'Monthly budget')),
-    el(
-      'table',
-      { class: 'budget' },
+  // Built once per game and then updated in place, so the tax slider keeps
+  // working while the simulation ticks.
+  let r = container._budget;
+  if (!r || r.game !== game) {
+    const cell = () => el('td', { class: 'num' });
+    const rows = { resTax: cell(), bizTax: cell(), tourism: cell(), upkeep: cell(), net: cell() };
+    const totalRow = el('tr', { class: 'total' }, el('td', {}, 'Profit'), rows.net);
+    const tax = el('input', { type: 'range', min: 0, max: 20, step: 1, id: 'tax-slider', 'aria-label': 'Tax rate' });
+    const taxOut = el('output', { for: 'tax-slider' });
+    tax.addEventListener('input', () => {
+      taxOut.textContent = `${tax.value}%`;
+      onTax(Number(tax.value));
+    });
+    const bar = (cls) => el('div', { class: `bar ${cls}` });
+    const homesBar = bar('bar-homes');
+    const jobsBar = bar('bar-jobs');
+    const popChart = el('canvas', { class: 'spark', 'aria-label': 'Population history' });
+    const moneyChart = el('canvas', { class: 'spark', 'aria-label': 'Treasury history' });
+    setChildren(
+      container,
+      el('div', { class: 'panel-head' }, el('h3', {}, 'Monthly budget')),
       el(
-        'tbody',
-        {},
-        row('Resident taxes', b.resTax),
-        row('Business taxes', b.bizTax),
-        row('Tourism', b.tourism),
-        row('Upkeep', -b.upkeep, 'cost'),
-        row('Profit', b.net, b.net < 0 ? 'total negative' : 'total'),
+        'table',
+        { class: 'budget' },
+        el(
+          'tbody',
+          {},
+          el('tr', {}, el('td', {}, 'Resident taxes'), rows.resTax),
+          el('tr', {}, el('td', {}, 'Business taxes'), rows.bizTax),
+          el('tr', {}, el('td', {}, 'Tourism'), rows.tourism),
+          el('tr', { class: 'cost' }, el('td', {}, 'Upkeep'), rows.upkeep),
+          totalRow,
+        ),
       ),
-    ),
-    el('label', { class: 'tax-label', for: 'tax-slider' }, 'Tax rate ', taxOut),
-    tax,
-    el('p', { class: 'muted small' }, 'Lower taxes make residents happier; higher taxes fill the treasury.'),
-    el('h4', {}, 'Demand'),
-    demandBar('Homes', a.demand.homes, 'bar-homes'),
-    demandBar('Jobs', a.demand.jobs, 'bar-jobs'),
-    el('h4', {}, 'Population'),
-    popChart,
-    el('h4', {}, 'Treasury'),
-    moneyChart,
-  );
-  requestAnimationFrame(() => {
-    sparkline(popChart, game.history.map((h) => h.pop), '#4cc9f0');
-    sparkline(moneyChart, game.history.map((h) => h.money), '#f9c74f');
-  });
+      el('label', { class: 'tax-label', for: 'tax-slider' }, 'Tax rate ', taxOut),
+      tax,
+      el('p', { class: 'muted small' }, 'Lower taxes make residents happier; higher taxes fill the treasury.'),
+      el('h4', {}, 'Demand'),
+      el('div', { class: 'demand-row', title: 'Unfilled jobs waiting for residents' }, el('span', {}, 'Homes'), el('div', { class: 'progress' }, homesBar)),
+      el('div', { class: 'demand-row', title: 'Unemployed residents looking for work' }, el('span', {}, 'Jobs'), el('div', { class: 'progress' }, jobsBar)),
+      el('h4', {}, 'Population'),
+      popChart,
+      el('h4', {}, 'Treasury'),
+      moneyChart,
+    );
+    r = container._budget = { game, rows, totalRow, tax, taxOut, homesBar, jobsBar, popChart, moneyChart, historyLength: -1 };
+  }
+  const b = a.budget;
+  r.rows.resTax.textContent = formatSignedMoney(b.resTax, c);
+  r.rows.bizTax.textContent = formatSignedMoney(b.bizTax, c);
+  r.rows.tourism.textContent = formatSignedMoney(b.tourism, c);
+  r.rows.upkeep.textContent = formatSignedMoney(-b.upkeep, c);
+  r.rows.net.textContent = formatSignedMoney(b.net, c);
+  r.totalRow.classList.toggle('negative', b.net < 0);
+  if (document.activeElement !== r.tax) r.tax.value = String(game.taxRate);
+  r.taxOut.textContent = `${game.taxRate}%`;
+  r.homesBar.style.width = `${Math.round(a.demand.homes * 100)}%`;
+  r.jobsBar.style.width = `${Math.round(a.demand.jobs * 100)}%`;
+  if (r.historyLength !== game.history.length) {
+    r.historyLength = game.history.length;
+    sparkline(r.popChart, game.history.map((h) => h.pop), '#4cc9f0', true);
+    sparkline(r.moneyChart, game.history.map((h) => h.money), '#f9c74f', false);
+  }
 }
 
 // --- inspector & tooltip ----------------------------------------------------
@@ -405,7 +429,7 @@ export function describeTile(game, a, x, y) {
 
 export function renderInspector(container, info, onClose) {
   container.hidden = false;
-  container.replaceChildren(
+  setChildren(container,
     el('button', { type: 'button', class: 'icon-btn close', 'aria-label': 'Close', onclick: onClose }, '✕'),
     el('strong', {}, info.title),
     info.description ? el('p', { class: 'muted small' }, info.description) : null,
@@ -415,7 +439,7 @@ export function renderInspector(container, info, onClose) {
 
 export function showTooltip(tooltip, x, y, title, lines) {
   tooltip.hidden = false;
-  tooltip.replaceChildren(el('strong', {}, title), ...lines.map((l) => el('div', {}, l)));
+  setChildren(tooltip, el('strong', {}, title), ...lines.map((l) => el('div', {}, l)));
   const pad = 14;
   const parent = tooltip.parentElement.getBoundingClientRect();
   const w = tooltip.offsetWidth;

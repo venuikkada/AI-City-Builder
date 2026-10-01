@@ -11,9 +11,9 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12"
   },
-  "license": "MIT",
+  "license": "UNLICENSED",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",
     "zod": "^4.6.5"

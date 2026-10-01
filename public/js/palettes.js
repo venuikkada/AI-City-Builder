@@ -217,24 +217,27 @@ function parseHex(hex) {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
-/** Multiplies a colour's brightness (0.8 = darker, 1.2 = lighter). Cached. */
+const toHex = (r, g, b) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+
+/** Multiplies a colour's brightness (0.8 = darker, 1.2 = lighter). Returns hex, cached. */
 export function shade(hex, factor) {
   const key = `${hex}|${factor}`;
   let out = cache.get(key);
   if (!out) {
     const [r, g, b] = parseHex(hex);
     const f = (c) => Math.max(0, Math.min(255, Math.round(factor >= 1 ? c + (255 - c) * (factor - 1) : c * factor)));
-    out = `rgb(${f(r)},${f(g)},${f(b)})`;
+    out = toHex(f(r), f(g), f(b));
     cache.set(key, out);
   }
   return out;
 }
 
+/** Blends two hex colours; returns hex so the result can be shaded again. */
 export function mix(a, b, t) {
   const [r1, g1, b1] = parseHex(a);
   const [r2, g2, b2] = parseHex(b);
   const m = (x, y) => Math.round(x + (y - x) * t);
-  return `rgb(${m(r1, r2)},${m(g1, g2)},${m(b1, b2)})`;
+  return toHex(m(r1, r2), m(g1, g2), m(b1, b2));
 }
 
 export function rgba(hex, alpha) {
@@ -256,5 +259,5 @@ function hslToHex(h, s, l) {
   const k = (n) => (n + h / 30) % 12;
   const a = s * Math.min(l, 1 - l);
   const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
-  return `#${[f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+  return toHex(f(0), f(8), f(4));
 }

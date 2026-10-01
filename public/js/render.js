@@ -149,11 +149,13 @@ export class Renderer {
     this.canvas.height = Math.round(this.height * this.dpr);
   }
 
+  /** Starts zoomed in on the middle of the highway, close enough to see buildings. */
   fitToMap() {
     const size = this.state.size;
+    const fit = Math.min(this.width / (size * TILE_W), this.height / (size * TILE_H + 120)) * 1.05;
     this.camera.x = 0;
     this.camera.y = size * HH + 20;
-    this.camera.zoom = clamp(Math.min(this.width / (size * TILE_W), this.height / (size * TILE_H + 120)) * 1.05, MIN_ZOOM, 1.2);
+    this.camera.zoom = clamp(fit * 1.9, 0.45, 1.15);
   }
 
   screenToWorld(sx, sy) {
@@ -482,7 +484,7 @@ export class Renderer {
     const count = 2 + (h % 3);
     for (let k = 0; k < count; k++) {
       const [ox, oy] = spots[(h + k) % spots.length];
-      tree(this.ctx, wx + ox, wy + oy, 0.95 + ((h >> (k + 3)) % 4) / 10, P.forest[(h >> k) % P.forest.length]);
+      tree(this.ctx, wx + ox, wy + oy, 0.95 + ((h >>> (k + 3)) % 4) / 10, P.forest[(h >>> k) % P.forest.length]);
     }
   }
 
