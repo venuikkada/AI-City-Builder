@@ -5,7 +5,7 @@
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { createAi } from './ai.js';
 import { offlinePlan, offlineMissions, offlineBuilding } from '../public/js/shared/offline.js';
 import { cleanText, sanitizeMissionContext, STYLES, LIMITS } from '../public/js/shared/plan.js';
@@ -126,10 +126,15 @@ export function createAppServer({ ai = createAi(), publicDir = PUBLIC_DIR, limit
       dailyMax: Number(env.AI_MAX_REQUESTS_PER_DAY) || 2000,
     });
   const trustProxy = env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true';
+  let warnedAboutProxy = false;
 
   const clientKey = (req) => {
-    const forwarded = trustProxy && req.headers['x-forwarded-for'];
-    return (forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded && !trustProxy && !warnedAboutProxy) {
+      warnedAboutProxy = true;
+      logger.warn('Requests arrive through a proxy. Set TRUST_PROXY=1 so AI rate limits apply per player, not to everyone at once.');
+    }
+    return (trustProxy && forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
   };
 
   /** Runs the AI call when possible, otherwise (or on failure) the offline equivalent. */
@@ -208,20 +213,5 @@ export function createAppServer({ ai = createAi(), publicDir = PUBLIC_DIR, limit
       sendJson(res, status, { error: status === 500 ? 'Something went wrong' : err.message });
     }
     logger.info(`${req.method} ${pathname} ${res.statusCode} ${Date.now() - started}ms`);
-  });
-}
-
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
-if (isMain) {
-  try {
-    process.loadEnvFile?.(path.join(ROOT, '.env'));
-  } catch {
-    // No .env file: fine, use the environment as-is.
-  }
-  const port = Number(process.env.PORT) || 3000;
-  const ai = createAi();
-  createAppServer({ ai }).listen(port, () => {
-    console.log(`AI City Builder → http://localhost:${port}`);
-    console.log(ai.enabled ? `AI planner: Claude (${ai.model})` : 'AI planner: offline (set ANTHROPIC_API_KEY to enable Claude)');
   });
 }

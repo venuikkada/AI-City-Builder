@@ -481,6 +481,10 @@ textarea {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
+  /* keep the HUD and toolbar clear of phone notches and home bars */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--bg);
 }
 
 .hud {
@@ -1297,5 +1301,15 @@ input[type='range'] {
   }
   .city-name {
     max-width: 180px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

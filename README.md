@@ -27,15 +27,17 @@ Type something like *“Build a futuristic Hyderabad.”* Claude designs the cit
 
 ## Quick start
 
-Requires Node.js 20.12 or newer.
+Run it on your own computer (requires Node.js 20.12 or newer):
 
 ```bash
+git clone https://github.com/venuikkada/AI-City-Builder.git
+cd AI-City-Builder
 npm install
-cp .env.example .env        # then paste your ANTHROPIC_API_KEY into .env
-npm start                   # http://localhost:3000
+cp .env.example .env        # optional: paste your ANTHROPIC_API_KEY into .env
+npm start                   # then open http://localhost:3000
 ```
 
-Without a key the game still runs, with the offline planner designing the cities. The start screen shows which planner is active.
+Without a key the game still runs, with the offline planner designing the cities. The start screen shows which planner is active. With a key, `npm run check:ai` confirms Claude works by making two real API calls (about $0.10).
 
 ## How to play
 
@@ -86,19 +88,29 @@ The browser never talks to Claude directly. The Node server holds the API key an
 
 ## Deploying
 
-- **Any Node host** (Render, Railway, Fly.io, a VPS, Hostinger Node.js hosting): run `npm install --omit=dev && npm start` with `ANTHROPIC_API_KEY` set as an environment variable. Set `TRUST_PROXY=1` if the host puts a proxy in front.
-- **Static hosting only** (GitHub Pages, Netlify, itch.io): upload the `public/` folder. The game detects that there's no server and uses the in-browser offline planner.
-- The page is iframe-friendly, so it can be embedded on web-game portals.
+Any Node.js host works: Render, Railway, Fly.io, Hostinger Node.js hosting, or a VPS.
+
+1. **Build and start:** `npm ci --omit=dev`, then `npm start` (runs `server.js`). Use Node 20.12 or newer.
+2. **Environment:** set `ANTHROPIC_API_KEY` as a secret. Set `TRUST_PROXY=1` on platforms that put a proxy in front of your app (most do); otherwise every player shares one AI rate limit. The server logs a warning when it detects this.
+3. **Health check:** `GET /api/status` returns `{"ai": true|false, …}`.
+4. **Verify the key:** run `npm run check:ai` once with the production key.
+5. **Request timeouts:** an AI city plan can take up to a minute or two. If your host cuts requests off sooner, players get the offline planner instead. Pick a host that allows long requests, or set `AI_EFFORT=low`.
+
+For **static hosting only** (GitHub Pages, Netlify, itch.io), upload the `public/` folder. The game detects that there's no server and uses the in-browser offline planner, including on hosts that rewrite unknown routes to `index.html`.
+
+The page is iframe-friendly, so it can be embedded on web-game portals.
 
 ## Project structure
 
 ```
+server.js               Entry point: loads .env and starts the server
 public/                 Browser game (plain ES modules, no build step)
   js/shared/            Code shared with the server: building catalog, plan sanitizers, offline planner
   js/game/              Simulation: map & terrain, placement, traffic routing, economy, missions, advisor tips
   js/render.js          Isometric canvas renderer (procedural buildings, cars, overlays)
   js/main.js, ui.js     Screens, game loop, HUD and panels
 server/                 Node HTTP server, Claude integration, prompts and schemas
+scripts/check-ai.js     `npm run check:ai`: verifies your Claude key and model
 test/                   node:test suites (simulation, traffic, sanitizers, AI client, server)
 docs/                   Screenshots and the go-to-market playbook
 ```
@@ -108,6 +120,7 @@ docs/                   Screenshots and the go-to-market playbook
 ```bash
 npm test     # 42 tests: simulation balance, traffic routing, sanitizers, AI client (mocked), HTTP server
 npm run dev  # restart the server on file changes
+npm run check:ai  # real Claude calls with your key
 ```
 
 Open `http://localhost:3000/?debug` to expose `window.aicb` (app state, renderer, analysis) in the browser console.

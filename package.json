@@ -4,11 +4,12 @@
   "private": true,
   "description": "Describe your dream city, let AI plan the missions and buildings, then build it and manage money, traffic and population.",
   "type": "module",
-  "main": "server/index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "test": "node --test"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "check:ai": "node scripts/check-ai.js"
   },
   "engines": {
     "node": ">=20.12"
