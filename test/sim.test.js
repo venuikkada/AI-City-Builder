@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { offlinePlan } from '../public/js/shared/offline.js';
 import { createGame, serializeGame, deserializeGame, addMissions, addCustomBuilding, TERRAIN, DIFFICULTIES } from '../public/js/game/state.js';
-import { checkPlacement, placeBuilding, bulldoze, linePath, areaTiles, applyMany, BRIDGE_MULTIPLIER } from '../public/js/game/build.js';
+import { checkPlacement, placeBuilding, bulldoze, linePath, areaTiles, applyMany, undoBuild, BRIDGE_MULTIPLIER } from '../public/js/game/build.js';
 import { simulateMonth, getAnalysis } from '../public/js/game/sim.js';
 import { missionStatus } from '../public/js/game/missions.js';
 
@@ -73,6 +73,36 @@ test('bulldozing protects the highway and refunds same-month mistakes', () => {
   assert.equal(r.ok, true);
   assert.equal(state.money, before - state.defs.house.cost + Math.round(state.defs.house.cost * 0.5));
   assert.equal(state.tiles[4 * state.size + 4], null);
+});
+
+test('undo reverts the last build or clear, but only in the same month', () => {
+  const state = flatGame();
+  state.terrain[3 * state.size + 9] = TERRAIN.FOREST;
+  const start = state.money;
+  const road = applyMany(state, linePath(5, 3, 9, 3), 'road');
+  assert.equal(road.count, 5);
+  assert.equal(state.terrain[3 * state.size + 9], TERRAIN.GRASS, 'building clears the trees');
+  assert.equal(undoBuild(state, road.undo), true);
+  assert.equal(state.money, start);
+  for (let x = 5; x <= 9; x++) assert.equal(state.tiles[3 * state.size + x], null);
+  assert.equal(state.terrain[3 * state.size + 9], TERRAIN.FOREST, 'and undo brings them back');
+
+  // Clearing refunds same-month builds; undoing the clear takes the refund back.
+  applyMany(state, [[4, 4], [5, 4]], 'house');
+  const afterHomes = state.money;
+  const clear = applyMany(state, [[4, 4], [5, 4], [6, 4]], 'bulldoze');
+  assert.equal(clear.count, 2);
+  assert.ok(state.money > afterHomes);
+  assert.equal(undoBuild(state, clear.undo), true);
+  assert.equal(state.money, afterHomes);
+  assert.equal(state.tiles[4 * state.size + 4].d, 'house');
+
+  // Nothing built means nothing to undo, and undo expires when the month ends.
+  assert.equal(applyMany(state, [[4, 4]], 'house').undo, null);
+  const late = applyMany(state, [[8, 8]], 'shop');
+  simulateMonth(state);
+  assert.equal(undoBuild(state, late.undo), false);
+  assert.equal(state.tiles[8 * state.size + 8].d, 'shop');
 });
 
 test('line and area helpers cover the dragged tiles', () => {

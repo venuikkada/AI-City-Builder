@@ -1,11 +1,12 @@
-// DOM building blocks for the HUD and panels. AI-generated text is only ever
-// inserted as text nodes, never as HTML.
+// DOM building blocks for the HUD, build menu and panels. AI-generated text is
+// only ever inserted as text nodes, never as HTML.
 
-import { CATEGORIES, BONUSES, milestoneFor, nextMilestone } from './shared/catalog.js';
+import { BONUSES, milestoneFor, nextMilestone } from './shared/catalog.js';
 import { OBJECTIVES } from './shared/plan.js';
 import { missionStatus, describeObjective } from './game/missions.js';
 import { dateLabel } from './game/state.js';
-import { formatMoney, formatSignedMoney, formatNumber, percent } from './format.js';
+import { formatMoney, formatSignedMoney, formatNumber, formatCompact, percent } from './format.js';
+import { icon } from './icons.js';
 
 export const STYLE_AVATARS = {
   futuristic: '🤖',
@@ -40,6 +41,13 @@ export function setChildren(node, ...children) {
   node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
 }
 
+const setText = (node, text) => {
+  if (node.textContent !== text) node.textContent = text;
+};
+
+const SERVICE_LABELS = { education: 'School', health: 'Health', safety: 'Safety' };
+const EFFECT_LABELS = { tourism: 'Tourism magnet', happiness: 'Happiness boost', transit: 'Transit hub', tech: 'Tech jobs', green: 'Clean air' };
+
 /** One-line gameplay summary of a building definition. */
 export function statsLine(def, currency) {
   const parts = [`${formatMoney(def.cost, currency)}`];
@@ -47,30 +55,70 @@ export function statsLine(def, currency) {
   if (def.residents) parts.push(`${def.residents} residents`);
   if (def.jobs) parts.push(`${def.jobs} jobs`);
   if (def.capacity) parts.push(`${def.capacity} cars`);
-  if (def.service) parts.push(`${def.service} r${def.radius}`);
-  if (def.transit) parts.push(`${Math.round(def.transit * 100)}% ride transit (r${def.radius})`);
-  if (def.happiness) parts.push(`+${def.happiness} happiness (r${def.radius || 3})`);
+  if (def.service) parts.push(`${SERVICE_LABELS[def.service] || def.service} cover, radius ${def.radius}`);
+  if (def.transit) parts.push(`${Math.round(def.transit * 100)}% ride transit (radius ${def.radius})`);
+  if (def.happiness) parts.push(`+${def.happiness} happiness`);
   if (def.pollution && def.pollution >= 1) parts.push('pollutes');
   if (def.absorb) parts.push('cleans air');
-  if (def.tourism) parts.push(`tourism`);
+  if (def.tourism) parts.push('tourism');
   if (def.bonus && def.bonus !== 'none') parts.push(`${BONUSES[def.bonus].label} bonus`);
   return parts.join(' · ');
 }
 
-// --- start & reveal -------------------------------------------------------
+/** The single most useful number for a build card. */
+export function keyStat(def) {
+  if (def.category === 'road') return `${def.capacity} cars`;
+  if (def.residents) return `${def.residents} residents`;
+  if (def.archetype === 'landmark') return EFFECT_LABELS[def.effect] || 'Landmark';
+  if (def.transit) return `${Math.round(def.transit * 100)}% ride transit`;
+  if (def.service) return `${SERVICE_LABELS[def.service] || 'Service'} cover`;
+  if (def.jobs) return `${def.jobs} jobs`;
+  if (def.happiness) return `+${def.happiness} happiness`;
+  return '';
+}
 
+// --- start, loading & reveal ------------------------------------------------
+
+// [emoji, short chip label, the prompt it fills in]
 export const EXAMPLE_PROMPTS = [
-  'Build a futuristic Hyderabad.',
-  'A green, car-free Bengaluru garden city',
-  'Cyberpunk Mumbai by the sea',
-  'Heritage Jaipur with a modern metro',
-  'A solar-powered desert oasis',
-  'Tokyo in the year 2099',
+  ['🚀', 'Futuristic Hyderabad', 'Build a futuristic Hyderabad.'],
+  ['🌃', 'Cyberpunk Mumbai', 'Cyberpunk Mumbai by the sea'],
+  ['🌿', 'Green Bengaluru', 'A green, car-free Bengaluru garden city'],
+  ['🏰', 'Heritage Jaipur', 'Heritage Jaipur with a modern metro'],
+  ['🗼', 'Tokyo 2099', 'Tokyo in the year 2099'],
+  ['🏜️', 'Desert oasis', 'A solar-powered desert oasis'],
 ];
 
 export function renderChips(container, onPick) {
-  setChildren(container,
-    ...EXAMPLE_PROMPTS.map((p) => el('button', { type: 'button', class: 'chip', onclick: () => onPick(p) }, p)),
+  setChildren(
+    container,
+    ...EXAMPLE_PROMPTS.map(([emoji, label, prompt]) =>
+      el(
+        'button',
+        { type: 'button', class: 'chip', title: prompt, onclick: () => onPick(prompt) },
+        el('span', { class: 'chip-emoji', 'aria-hidden': 'true' }, emoji),
+        label,
+      ),
+    ),
+  );
+}
+
+export const LOADING_STEPS = [
+  'Reading your vision',
+  'Shaping the land and water',
+  'Zoning neighbourhoods',
+  'Designing landmarks',
+  'Writing your missions',
+  'Hiring a city advisor',
+];
+
+export function renderLoadingSteps(container, active) {
+  setChildren(
+    container,
+    ...LOADING_STEPS.map((text, i) => {
+      const state = i < active ? 'done' : i === active ? 'active' : 'todo';
+      return el('li', { dataset: { state } }, el('span', { class: 'step-dot' }, state === 'done' ? icon('check', { size: 13, stroke: 3.2 }) : null), text);
+    }),
   );
 }
 
@@ -78,155 +126,259 @@ export function renderReveal(plan, meta) {
   $('reveal-name').textContent = plan.cityName;
   $('reveal-tagline').textContent = plan.tagline;
   $('reveal-vision').textContent = plan.vision;
-  $('reveal-source').textContent = meta.source === 'ai' ? '✨ Designed by Claude' : '⚙️ Offline planner';
-  $('reveal-source').className = `badge ${meta.source === 'ai' ? 'badge-ai' : ''}`;
+  const source = $('reveal-source');
+  setChildren(source, icon(meta.source === 'ai' ? 'sparkles' : 'city', { size: 14 }), meta.source === 'ai' ? 'Designed by Claude' : 'Offline planner');
+  source.className = `badge ${meta.source === 'ai' ? 'badge-ai' : ''}`;
   $('reveal-style').textContent = `${plan.style} · ${plan.terrain.water === 'none' ? 'dry land' : plan.terrain.water}`;
   const notice = $('reveal-notice');
   notice.hidden = !meta.notice;
   notice.textContent = meta.notice || '';
-  $('reveal-landmarks').replaceChildren(
+  setChildren(
+    $('reveal-landmarks'),
     ...plan.landmarks.map((l) =>
       el(
         'li',
         { class: 'landmark' },
-        el('span', { class: 'landmark-icon' }, l.icon),
-        el('div', {}, el('strong', {}, l.name), el('p', {}, l.description), el('small', {}, `${l.effect[0].toUpperCase()}${l.effect.slice(1)} · unlocks at ${formatNumber(l.unlockPopulation)} people`)),
+        el('span', { class: 'landmark-icon', 'aria-hidden': 'true' }, l.icon),
+        el('strong', {}, l.name),
+        el('p', {}, l.description),
+        el('small', {}, `${EFFECT_LABELS[l.effect] || 'Landmark'} · ${l.unlockPopulation ? `unlocks at ${formatNumber(l.unlockPopulation)} people` : 'ready from day one'}`),
       ),
     ),
   );
-  $('reveal-missions').replaceChildren(
-    ...plan.missions.map((m) => el('li', {}, el('strong', {}, m.title), ' — ', m.description || describeObjective(m, null, plan.currency))),
+  setChildren(
+    $('reveal-missions'),
+    ...plan.missions.map((m) => el('li', {}, el('strong', {}, m.title), el('p', {}, m.description || describeObjective(m, null, plan.currency)))),
   );
-  $('reveal-buildings').replaceChildren(
-    ...Object.values(plan.names).map((n) => el('li', { class: 'building-chip', title: n.description }, el('span', {}, n.icon), n.name)),
+  setChildren(
+    $('reveal-buildings'),
+    ...Object.values(plan.names).map((n) => el('li', { class: 'building-chip', title: n.description }, el('span', { 'aria-hidden': 'true' }, n.icon), n.name)),
   );
 }
 
-// --- toolbar ---------------------------------------------------------------
+// --- build menu ---------------------------------------------------------------
 
-const TOOL_GROUPS = [
-  ['road', ['road', 'avenue']],
-  ['residential', ['house', 'apartment', 'tower']],
-  ['commercial', ['shop', 'office']],
-  ['industrial', ['factory', 'techpark']],
-  ['service', ['school', 'hospital', 'police']],
-  ['transit', ['bus', 'metro']],
-  ['park', ['park', 'plaza']],
+const CATEGORY_COLORS = {
+  road: '#9aa6bf',
+  residential: '#7cc4ff',
+  commercial: '#2dd4bf',
+  industrial: '#f6ad55',
+  service: '#ff8fa3',
+  transit: '#ffb238',
+  park: '#4ade80',
+  landmark: '#ffd166',
+};
+
+export const BUILD_TABS = [
+  { id: 'road', label: 'Roads', emoji: '🛣️', ids: ['road', 'avenue'] },
+  { id: 'residential', label: 'Homes', emoji: '🏠', ids: ['house', 'apartment', 'tower'] },
+  { id: 'commercial', label: 'Business', emoji: '🏪', ids: ['shop', 'office'] },
+  { id: 'industrial', label: 'Industry', emoji: '🏭', ids: ['factory', 'techpark'] },
+  { id: 'service', label: 'Services', emoji: '🏥', ids: ['school', 'hospital', 'police'] },
+  { id: 'transit', label: 'Transit', emoji: '🚇', ids: ['bus', 'metro'] },
+  { id: 'park', label: 'Parks', emoji: '🌳', ids: ['park', 'plaza'] },
+  { id: 'landmark', label: 'Landmarks', emoji: '🏛️' },
+  { id: 'ideas', label: 'Ideas', emoji: '💡' },
 ];
 
-export function buildToolbar(container, game, handlers) {
-  const currency = game.plan.currency;
-  const buttons = new Map();
-  const info = el('div', { class: 'tool-info', id: 'tool-info' });
+/** Which tab a building lives in (used to jump to newly unlocked buildings). */
+export function tabFor(game, id) {
+  const def = game.defs[id];
+  if (!def) return 'road';
+  if (def.archetype === 'landmark') return 'landmark';
+  return BUILD_TABS.some((t) => t.id === def.category) ? def.category : 'ideas';
+}
 
-  const makeButton = (id, icon, name, sub) => {
-    const btn = el(
+export function isLocked(game, def) {
+  return (def.unlock || 0) > game.maxPop;
+}
+
+export function isBuilt(game, def) {
+  return Boolean(def.unique && game.tiles.some((t) => t && t.d === def.id));
+}
+
+/** Category tabs plus a grid of cards. Returns a small controller. */
+export function createBuildMenu({ tabs, grid, info }, game, handlers) {
+  const currency = game.plan.currency;
+  let category = handlers.category || 'road';
+  let selected = handlers.selected || 'inspect';
+  const cards = new Map();
+
+  const idsFor = (tab) => {
+    if (tab.id === 'landmark') return game.plan.landmarks.map((l) => l.id);
+    if (tab.id === 'ideas') return game.custom.map((c) => c.id);
+    return [...tab.ids, ...game.custom.filter((c) => game.defs[c.id]?.category === tab.id).map((c) => c.id)];
+  };
+
+  function renderTabs() {
+    setChildren(
+      tabs,
+      ...BUILD_TABS.map((tab) =>
+        el(
+          'button',
+          {
+            type: 'button',
+            role: 'tab',
+            class: `cat-tab${tab.id === category ? ' active' : ''}`,
+            'aria-selected': String(tab.id === category),
+            dataset: { cat: tab.id },
+            onclick: () => setCategory(tab.id),
+          },
+          el('span', { class: 'cat-emoji', 'aria-hidden': 'true' }, tab.emoji),
+          tab.label,
+        ),
+      ),
+    );
+  }
+
+  function card(id) {
+    const def = game.defs[id];
+    const node = el(
       'button',
       {
         type: 'button',
-        class: 'tool',
+        class: `tool-card${def.custom ? ' custom' : ''}`,
         dataset: { tool: id },
+        title: def.description,
         onclick: () => handlers.onSelect(id),
         onmouseenter: () => showInfo(id),
         onfocus: () => showInfo(id),
       },
-      el('span', { class: 'tool-icon' }, icon),
-      el('span', { class: 'tool-text' }, el('span', { class: 'tool-name' }, name), el('span', { class: 'tool-sub' }, sub)),
+      el('span', { class: 'tool-emoji', 'aria-hidden': 'true' }, def.icon),
+      el('span', { class: 'tool-name' }, def.name),
+      el('span', { class: 'tool-stat' }, keyStat(def)),
+      el('span', { class: 'tool-cost' }, formatMoney(def.cost, currency)),
+      el('span', { class: 'tool-badge', hidden: true }),
     );
-    buttons.set(id, btn);
-    return btn;
-  };
+    node.style.setProperty('--cat', CATEGORY_COLORS[def.category] || CATEGORY_COLORS.commercial);
+    cards.set(id, node);
+    return node;
+  }
 
-  const showInfo = (id) => {
+  function renderGrid() {
+    cards.clear();
+    const tab = BUILD_TABS.find((t) => t.id === category) || BUILD_TABS[0];
+    const children = idsFor(tab).map(card);
+    if (tab.id === 'ideas') {
+      children.unshift(
+        el(
+          'button',
+          { type: 'button', class: 'tool-card tool-invent', onclick: () => handlers.onInvent() },
+          el('span', { class: 'tool-emoji', 'aria-hidden': 'true' }, '✨'),
+          el('span', { class: 'invent-text' }, el('span', { class: 'tool-name' }, 'Invent a building'), el('span', { class: 'tool-stat' }, 'Describe any idea and AI turns it into a new building')),
+        ),
+      );
+    }
+    setChildren(grid, ...children);
+    grid.scrollTop = 0;
+    update(selected);
+  }
+
+  function setCategory(id) {
+    category = BUILD_TABS.some((t) => t.id === id) ? id : 'road';
+    handlers.onCategory?.(category);
+    renderTabs();
+    renderGrid();
+    // Scroll only the tab strip: scrollIntoView would also scroll the page while the sheet is off-screen.
+    const active = tabs.querySelector('.active');
+    if (active) tabs.scrollLeft = Math.max(0, active.offsetLeft - 12);
+  }
+
+  function showInfo(id) {
+    if (!info) return;
     const def = game.defs[id];
     if (!def) {
-      setChildren(info,
-        el('strong', {}, id === 'bulldoze' ? 'Bulldoze' : 'Inspect'),
-        el('p', {}, id === 'bulldoze' ? 'Drag to clear buildings, roads or trees. Same-month demolitions refund half the cost.' : 'Drag to move the map, click a tile to see details. Right-drag always pans.'),
+      setChildren(
+        info,
+        el('strong', {}, id === 'bulldoze' ? 'Clear' : 'Explore'),
+        el(
+          'p',
+          {},
+          id === 'bulldoze'
+            ? 'Drag over buildings, roads or trees to clear them. Same-month demolitions refund half the cost.'
+            : 'Drag to move the map, click a tile to see details. Right-drag always pans.',
+        ),
       );
       return;
     }
-    const locked = (def.unlock || 0) > game.maxPop;
-    setChildren(info,
+    setChildren(
+      info,
       el('strong', {}, `${def.icon} ${def.name}`),
       el('p', {}, def.description),
-      el('small', {}, statsLine(def, currency)),
-      locked ? el('small', { class: 'locked-note' }, `🔒 Unlocks at ${formatNumber(def.unlock)} population`) : null,
-    );
-  };
-
-  const groups = [
-    el('div', { class: 'tool-group tool-group-basic' }, makeButton('inspect', '🔍', 'Inspect', 'Pan & info'), makeButton('bulldoze', '🧨', 'Bulldoze', 'Clear tiles')),
-  ];
-  for (const [category, ids] of TOOL_GROUPS) {
-    groups.push(
-      el(
-        'div',
-        { class: 'tool-group' },
-        el('div', { class: 'tool-group-title' }, `${CATEGORIES[category].icon} ${CATEGORIES[category].label}`),
-        ...ids.map((id) => makeButton(id, game.defs[id].icon, game.defs[id].name, formatMoney(game.defs[id].cost, currency))),
-        ...game.custom.filter((c) => game.defs[c.id].category === category).map((c) => makeButton(c.id, game.defs[c.id].icon, game.defs[c.id].name, `★ ${formatMoney(game.defs[c.id].cost, currency)}`)),
-      ),
+      el('small', { class: 'stats' }, statsLine(def, currency)),
+      isLocked(game, def) ? el('small', { class: 'locked-note' }, `Unlocks at ${formatNumber(def.unlock)} population`) : null,
     );
   }
-  groups.push(
-    el(
-      'div',
-      { class: 'tool-group' },
-      el('div', { class: 'tool-group-title' }, `${CATEGORIES.landmark.icon} Landmarks`),
-      ...game.plan.landmarks.map((l) => makeButton(l.id, l.icon, l.name, formatMoney(game.defs[l.id].cost, currency))),
-    ),
-    el(
-      'div',
-      { class: 'tool-group' },
-      el('div', { class: 'tool-group-title' }, '✨ Invent'),
-      el('button', { type: 'button', class: 'tool tool-invent', onclick: handlers.onInvent }, el('span', { class: 'tool-icon' }, '💡'), el('span', { class: 'tool-text' }, el('span', { class: 'tool-name' }, 'Invent a building'), el('span', { class: 'tool-sub' }, 'Describe it, AI designs it'))),
-    ),
-  );
-  setChildren(container, el('div', { class: 'tool-scroll' }, ...groups), info);
-  showInfo('inspect');
 
+  function update(sel = selected) {
+    if (sel !== selected) {
+      selected = sel;
+      showInfo(sel);
+    }
+    for (const [id, node] of cards) {
+      const def = game.defs[id];
+      const locked = isLocked(game, def);
+      const built = !locked && isBuilt(game, def);
+      node.classList.toggle('active', id === sel);
+      node.setAttribute('aria-pressed', String(id === sel));
+      const state = locked ? 'locked' : built ? 'built' : '';
+      if (node.dataset.state === state) continue;
+      node.dataset.state = state;
+      node.classList.toggle('locked', locked);
+      node.classList.toggle('built', built);
+      const badge = node.querySelector('.tool-badge');
+      badge.hidden = !state;
+      if (locked) setChildren(badge, icon('lock', { size: 11, stroke: 2.6 }), formatCompact(def.unlock));
+      else if (built) setChildren(badge, icon('check', { size: 11, stroke: 3 }), 'Built');
+    }
+  }
+
+  grid.onmouseleave = () => showInfo(selected);
+  renderTabs();
+  renderGrid();
+  showInfo(selected);
   return {
-    update(selected) {
-      for (const [id, btn] of buttons) {
-        const def = game.defs[id];
-        const locked = def ? (def.unlock || 0) > game.maxPop : false;
-        const built = def?.unique && game.tiles.some((t) => t && t.d === id);
-        btn.classList.toggle('active', id === selected);
-        btn.classList.toggle('locked', locked);
-        btn.classList.toggle('built', Boolean(built));
-        btn.setAttribute('aria-pressed', String(id === selected));
-        if (def) {
-          const sub = btn.querySelector('.tool-sub');
-          sub.textContent = locked ? `🔒 ${formatNumber(def.unlock)} pop` : built ? '✓ Built' : `${def.custom ? '★ ' : ''}${formatMoney(def.cost, currency)}`;
-        }
-      }
+    update,
+    setCategory,
+    get category() {
+      return category;
     },
-    showInfo,
   };
 }
 
 // --- HUD -------------------------------------------------------------------
 
+const MOODS = [
+  [70, 'happy', 'good'],
+  [45, 'neutral', 'warn'],
+  [0, 'sad', 'bad'],
+];
+
 export function updateHud(game, a) {
   const currency = game.plan.currency;
-  $('hud-name').textContent = game.plan.cityName;
-  $('hud-milestone').textContent = milestoneFor(Math.max(game.maxPop, a.population)).title;
-  $('hud-date').textContent = dateLabel(game);
-  $('hud-money').textContent = formatMoney(game.money, currency);
-  $('hud-money').classList.toggle('negative', game.money < 0);
+  const pop = Math.max(game.maxPop, a.population);
+  setText($('hud-name'), game.plan.cityName);
+  setText($('hud-milestone'), milestoneFor(pop).title);
+  setText($('hud-date'), dateLabel(game));
+  const next = nextMilestone(pop);
+  $('hud-milestone').title = next ? `Next: ${next.title} at ${formatNumber(next.pop)} people` : 'Top milestone reached';
+  setText($('hud-money'), formatMoney(game.money, currency));
+  $('stat-money').dataset.level = game.money < 0 ? 'bad' : '';
   const net = $('hud-net');
-  net.textContent = `${formatSignedMoney(a.budget.net, currency)}/mo`;
-  net.classList.toggle('negative', a.budget.net < 0);
-  $('hud-pop').textContent = formatNumber(a.population);
-  $('hud-jobs').textContent = formatNumber(a.jobs);
-  $('hud-happy').textContent = percent(a.happiness / 100);
-  $('hud-happy-icon').textContent = a.happiness >= 70 ? '😄' : a.happiness >= 50 ? '🙂' : a.happiness >= 35 ? '😐' : '😠';
-  const traffic = $('hud-traffic');
-  traffic.textContent = percent(a.congestion);
-  traffic.parentElement.dataset.level = a.congestion > 0.6 ? 'bad' : a.congestion > 0.35 ? 'warn' : 'good';
-  const next = nextMilestone(Math.max(game.maxPop, a.population));
-  $('hud-milestone').title = next ? `Next: ${next.title} at ${formatNumber(next.pop)}` : 'Top milestone reached';
+  setText(net, `${formatSignedMoney(a.budget.net, currency)}/mo`);
+  net.dataset.sign = a.budget.net < 0 ? 'neg' : 'pos';
+  setText($('hud-pop'), formatCompact(a.population));
+  setText($('hud-jobs'), formatCompact(a.jobs));
+  setText($('hud-happy'), percent(a.happiness / 100));
+  const [, mood, level] = MOODS.find(([min]) => a.happiness >= min) || MOODS[2];
+  const moodIcon = $('hud-happy-icon');
+  if (moodIcon.dataset.mood !== mood) {
+    moodIcon.dataset.mood = mood;
+    moodIcon.replaceChildren(icon(mood, { size: 16 }));
+  }
+  $('stat-happy').dataset.level = level;
+  setText($('hud-traffic'), percent(a.congestion));
+  $('stat-traffic').dataset.level = a.congestion > 0.6 ? 'bad' : a.congestion > 0.35 ? 'warn' : 'good';
 }
 
 // --- missions --------------------------------------------------------------
@@ -238,64 +390,104 @@ function formatMissionValue(m, value, currency) {
   return formatNumber(value);
 }
 
+function missionCard(m, game) {
+  const currency = game.plan.currency;
+  const bar = el('div', { class: 'bar' });
+  const progress = el('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': m.title }, bar);
+  const value = el('div', { class: 'm-value' });
+  const node = el(
+    'article',
+    { class: 'mission' },
+    el('header', {}, el('span', { class: 'm-title' }, m.title), el('span', { class: 'm-reward' }, `+${formatMoney(m.reward, currency)}`)),
+    m.description ? el('p', { class: 'm-desc' }, m.description) : null,
+    el('div', { class: 'm-goal' }, icon('target', { size: 15 }), describeObjective(m, game.defs, currency)),
+    progress,
+    value,
+  );
+  return { node, bar, progress, value };
+}
+
+/** Mission cards are built once and updated in place, so buttons keep working while the game ticks. */
 export function renderMissions(container, game, a, { advisorBusy, onAsk }) {
   const currency = game.plan.currency;
+  const advisorName = game.plan.advisorName;
+  let r = container._missions;
+  if (!r || r.game !== game) {
+    const count = el('span', { class: 'muted small' });
+    const list = el('div', { class: 'mission-list' });
+    const askLabel = el('span');
+    const ask = el('button', { type: 'button', class: 'btn btn-teal btn-block', onclick: () => onAsk() }, icon('sparkles', { size: 18 }), askLabel);
+    const doneWrap = el('div');
+    setChildren(container, el('div', { class: 'section-head' }, el('h3', {}, 'Missions'), count), list, ask, doneWrap);
+    r = container._missions = { game, count, list, ask, askLabel, doneWrap, key: null, doneKey: null, cards: new Map() };
+  }
   const active = game.missions.filter((m) => m.status === 'active');
   const queued = game.missions.filter((m) => m.status === 'queued');
   const done = game.missions.filter((m) => m.status === 'done');
-  const cards = active.map((m) => {
+  setText(r.count, `${done.length} done${queued.length ? ` · ${queued.length} queued` : ''}`);
+
+  const key = active.map((m) => m.id).join(',');
+  if (key !== r.key) {
+    r.key = key;
+    r.cards = new Map(active.map((m) => [m.id, missionCard(m, game)]));
+    setChildren(r.list, ...(active.length ? [...r.cards.values()].map((c) => c.node) : [el('p', { class: 'empty' }, 'All missions complete! Ask your advisor for more.')]));
+  }
+  for (const m of active) {
+    const c = r.cards.get(m.id);
     const s = missionStatus(game, a, m);
     const spec = OBJECTIVES[m.objective];
-    const valueText = spec.cmp === '<=' ? `now ${formatMissionValue(m, s.value, currency)}` : `${formatMissionValue(m, s.value, currency)} / ${formatMissionValue(m, m.target, currency)}`;
-    const bar = el('div', { class: 'bar' });
-    bar.style.width = `${Math.round(s.progress * 100)}%`;
-    return el(
-      'article',
-      { class: 'mission' },
-      el('header', {}, el('span', { class: 'm-title' }, m.title), el('span', { class: 'm-reward' }, `+${formatMoney(m.reward, currency)}`)),
-      m.description ? el('p', { class: 'm-desc' }, m.description) : null,
-      el('div', { class: 'm-goal' }, describeObjective(m, game.defs, currency)),
-      el('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': Math.round(s.progress * 100), 'aria-valuemin': 0, 'aria-valuemax': 100 }, bar),
-      el('div', { class: 'm-value' }, s.gateMet || !m.minPopulation ? valueText : `needs ${formatNumber(m.minPopulation)} residents first`),
+    const pct = Math.round(s.progress * 100);
+    c.bar.style.width = `${pct}%`;
+    c.progress.setAttribute('aria-valuenow', String(pct));
+    const valueText =
+      spec.cmp === '<=' ? `Now ${formatMissionValue(m, s.value, currency)}` : `${formatMissionValue(m, s.value, currency)} / ${formatMissionValue(m, m.target, currency)}`;
+    setText(c.value, s.gateMet || !m.minPopulation ? valueText : `Needs ${formatNumber(m.minPopulation)} residents first`);
+  }
+
+  r.ask.disabled = advisorBusy;
+  setText(r.askLabel, advisorBusy ? `${advisorName} is thinking…` : `Ask ${advisorName} for new missions`);
+
+  const doneKey = done.map((m) => m.id).join(',');
+  if (doneKey !== r.doneKey) {
+    r.doneKey = doneKey;
+    const wasOpen = Boolean(r.doneWrap.querySelector('details')?.open);
+    setChildren(
+      r.doneWrap,
+      done.length
+        ? el(
+            'details',
+            { class: 'done-list', open: wasOpen },
+            el('summary', {}, `Completed (${done.length})`),
+            el('ul', {}, ...done.slice().reverse().map((m) => el('li', {}, icon('ok', { size: 16 }), m.title, el('span', { class: 'muted' }, `+${formatMoney(m.reward, currency)}`)))),
+          )
+        : null,
     );
-  });
-  const advisorName = game.plan.advisorName;
-  const completedOpen = Boolean(container.querySelector('details.done-list')?.open);
-  setChildren(container,
-    el('div', { class: 'panel-head' }, el('h3', {}, 'Missions'), el('span', { class: 'muted' }, `${done.length} done${queued.length ? ` · ${queued.length} queued` : ''}`)),
-    ...(cards.length ? cards : [el('p', { class: 'empty' }, 'All missions complete! Ask your advisor for more.')]),
-    el(
-      'button',
-      { type: 'button', class: 'btn btn-ai btn-block', disabled: advisorBusy, onclick: onAsk },
-      advisorBusy ? `${advisorName} is thinking…` : `✨ Ask ${advisorName} for new missions`,
-    ),
-    done.length
-      ? el(
-          'details',
-          { class: 'done-list', open: completedOpen },
-          el('summary', {}, `Completed (${done.length})`),
-          el('ul', {}, ...done.slice().reverse().map((m) => el('li', {}, `✅ ${m.title} `, el('span', { class: 'muted' }, `+${formatMoney(m.reward, currency)}`)))),
-        )
-      : null,
-  );
+  }
 }
 
 // --- advisor ---------------------------------------------------------------
 
+const TIP_ICONS = { warn: 'warn', info: 'info', good: 'ok' };
+const NEWS_ICONS = { mission: '🏆', event: '⚡', unlock: '🔓', milestone: '🎉', warning: '⚠️', advisor: '💬' };
+
 export function renderAdvisor(container, game, tips, advice) {
   const news = game.log.slice(-14).reverse();
-  const icons = { mission: '🏆', event: '⚡', unlock: '🔓', milestone: '🎉', warning: '⚠️', advisor: '💬' };
-  setChildren(container,
+  const key = JSON.stringify([advice, tips.map((t) => t.text), news.length, news[0]?.text, game.month]);
+  if (container._key === key && container._game === game) return;
+  container._key = key;
+  container._game = game;
+  setChildren(
+    container,
     el(
       'div',
       { class: 'advisor-card' },
-      el('div', { class: 'avatar' }, STYLE_AVATARS[game.plan.style] || '🤖'),
-      el('div', {}, el('div', { class: 'advisor-name' }, game.plan.advisorName), el('p', { class: 'advisor-text' }, advice || game.plan.advisorIntro)),
+      el('div', { class: 'avatar', 'aria-hidden': 'true' }, STYLE_AVATARS[game.plan.style] || '🤖'),
+      el('div', {}, el('div', { class: 'advisor-name' }, game.plan.advisorName), el('p', { class: 'bubble' }, advice || game.plan.advisorIntro)),
     ),
     el('h4', {}, 'Right now'),
-    el('ul', { class: 'tips' }, ...tips.map((t) => el('li', { class: `tip tip-${t.level}` }, t.text))),
+    el('ul', { class: 'tips' }, ...tips.map((t) => el('li', { class: `tip tip-${t.level}` }, icon(TIP_ICONS[t.level] || 'info', { size: 16 }), el('span', {}, t.text)))),
     el('h4', {}, 'City news'),
-    el('ul', { class: 'news' }, ...news.map((n) => el('li', {}, el('span', { class: 'news-icon' }, icons[n.kind] || '•'), n.text))),
+    el('ul', { class: 'news' }, ...news.map((n) => el('li', {}, el('span', { class: 'news-icon', 'aria-hidden': 'true' }, NEWS_ICONS[n.kind] || '•'), el('span', {}, n.text)))),
   );
 }
 
@@ -304,7 +496,7 @@ export function renderAdvisor(container, game, tips, advice) {
 function sparkline(canvas, values, color, fromZero) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = canvas.clientWidth || 240;
-  const h = canvas.clientHeight || 48;
+  const h = canvas.clientHeight || 54;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   const ctx = canvas.getContext('2d');
@@ -313,15 +505,22 @@ function sparkline(canvas, values, color, fromZero) {
   if (values.length < 2) return;
   const min = fromZero ? Math.min(0, ...values) : Math.min(...values);
   const max = Math.max(...values, min + 1);
+  const points = values.map((v, i) => [(i / (values.length - 1)) * (w - 8) + 4, h - 5 - ((v - min) / (max - min || 1)) * (h - 10)]);
+  const fill = ctx.createLinearGradient(0, 0, 0, h);
+  fill.addColorStop(0, `${color}55`);
+  fill.addColorStop(1, `${color}00`);
+  ctx.beginPath();
+  points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.lineTo(points[points.length - 1][0], h);
+  ctx.lineTo(points[0][0], h);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.beginPath();
+  points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  values.forEach((v, i) => {
-    const x = (i / (values.length - 1)) * (w - 4) + 2;
-    const y = h - 3 - ((v - min) / (max - min || 1)) * (h - 6);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  ctx.lineJoin = 'round';
   ctx.stroke();
 }
 
@@ -333,21 +532,20 @@ export function renderBudget(container, game, a, { onTax }) {
   if (!r || r.game !== game) {
     const cell = () => el('td', { class: 'num' });
     const rows = { resTax: cell(), bizTax: cell(), tourism: cell(), upkeep: cell(), net: cell() };
-    const totalRow = el('tr', { class: 'total' }, el('td', {}, 'Profit'), rows.net);
+    const totalRow = el('tr', { class: 'total' }, el('td', {}, 'Monthly profit'), rows.net);
     const tax = el('input', { type: 'range', min: 0, max: 20, step: 1, id: 'tax-slider', 'aria-label': 'Tax rate' });
     const taxOut = el('output', { for: 'tax-slider' });
     tax.addEventListener('input', () => {
       taxOut.textContent = `${tax.value}%`;
       onTax(Number(tax.value));
     });
-    const bar = (cls) => el('div', { class: `bar ${cls}` });
-    const homesBar = bar('bar-homes');
-    const jobsBar = bar('bar-jobs');
+    const homesBar = el('div', { class: 'bar bar-homes' });
+    const jobsBar = el('div', { class: 'bar bar-jobs' });
     const popChart = el('canvas', { class: 'spark', 'aria-label': 'Population history' });
     const moneyChart = el('canvas', { class: 'spark', 'aria-label': 'Treasury history' });
     setChildren(
       container,
-      el('div', { class: 'panel-head' }, el('h3', {}, 'Monthly budget')),
+      el('div', { class: 'section-head' }, el('h3', {}, 'Budget'), el('span', { class: 'muted small' }, 'per month')),
       el(
         'table',
         { class: 'budget' },
@@ -361,7 +559,7 @@ export function renderBudget(container, game, a, { onTax }) {
           totalRow,
         ),
       ),
-      el('label', { class: 'tax-label', for: 'tax-slider' }, 'Tax rate ', taxOut),
+      el('label', { class: 'tax-label', for: 'tax-slider' }, 'Tax rate', taxOut),
       tax,
       el('p', { class: 'muted small' }, 'Lower taxes make residents happier; higher taxes fill the treasury.'),
       el('h4', {}, 'Demand'),
@@ -375,21 +573,50 @@ export function renderBudget(container, game, a, { onTax }) {
     r = container._budget = { game, rows, totalRow, tax, taxOut, homesBar, jobsBar, popChart, moneyChart, historyLength: -1 };
   }
   const b = a.budget;
-  r.rows.resTax.textContent = formatSignedMoney(b.resTax, c);
-  r.rows.bizTax.textContent = formatSignedMoney(b.bizTax, c);
-  r.rows.tourism.textContent = formatSignedMoney(b.tourism, c);
-  r.rows.upkeep.textContent = formatSignedMoney(-b.upkeep, c);
-  r.rows.net.textContent = formatSignedMoney(b.net, c);
+  setText(r.rows.resTax, formatSignedMoney(b.resTax, c));
+  setText(r.rows.bizTax, formatSignedMoney(b.bizTax, c));
+  setText(r.rows.tourism, formatSignedMoney(b.tourism, c));
+  setText(r.rows.upkeep, formatSignedMoney(-b.upkeep, c));
+  setText(r.rows.net, formatSignedMoney(b.net, c));
   r.totalRow.classList.toggle('negative', b.net < 0);
   if (document.activeElement !== r.tax) r.tax.value = String(game.taxRate);
-  r.taxOut.textContent = `${game.taxRate}%`;
+  setText(r.taxOut, `${game.taxRate}%`);
   r.homesBar.style.width = `${Math.round(a.demand.homes * 100)}%`;
   r.jobsBar.style.width = `${Math.round(a.demand.jobs * 100)}%`;
-  if (r.historyLength !== game.history.length) {
+  // Charts need a laid-out canvas; redraw when history grows or the panel appears.
+  const width = r.popChart.clientWidth;
+  if (width && (r.historyLength !== game.history.length || r.chartWidth !== width)) {
     r.historyLength = game.history.length;
-    sparkline(r.popChart, game.history.map((h) => h.pop), '#4cc9f0', true);
-    sparkline(r.moneyChart, game.history.map((h) => h.money), '#f9c74f', false);
+    r.chartWidth = width;
+    sparkline(r.popChart, game.history.map((h) => h.pop), '#7cc4ff', true);
+    sparkline(r.moneyChart, game.history.map((h) => h.money), '#ffb238', false);
   }
+}
+
+// --- map layers ----------------------------------------------------------------
+
+export const LAYERS = {
+  traffic: { label: 'Traffic', stops: ['#2ecc71', '#f1c40f', '#ff8c1a', '#ff3b4e'], ends: ['Flowing', 'Jammed'] },
+  happiness: { label: 'Happiness', stops: ['#ff3b4e', '#f1c40f', '#2ecc71'], ends: ['Unhappy', 'Happy'] },
+  pollution: { label: 'Pollution', stops: ['rgba(142,68,173,0.15)', '#8e44ad'], ends: ['Clean', 'Smoggy'] },
+  services: { label: 'Services', stops: ['#e74c3c', '#f39c12', '#a3d977', '#2ecc71'], ends: ['None nearby', 'All three'] },
+  transit: { label: 'Transit', stops: ['rgba(52,152,219,0.2)', '#3498db'], ends: ['Little', 'Lots'] },
+};
+
+export function legendGradient(name) {
+  const spec = LAYERS[name];
+  return spec ? `linear-gradient(90deg, ${spec.stops.join(', ')})` : '';
+}
+
+export function renderLegend(container, name) {
+  const spec = LAYERS[name];
+  if (!spec) {
+    setChildren(container, el('span', { class: 'muted' }, 'Pick a layer to see traffic, happiness, pollution, service or transit coverage.'));
+    return;
+  }
+  const scale = el('span', { class: 'legend-scale' });
+  scale.style.background = legendGradient(name);
+  setChildren(container, scale, el('div', { class: 'legend-labels' }, el('span', {}, spec.ends[0]), el('span', {}, spec.ends[1])));
 }
 
 // --- inspector & tooltip ----------------------------------------------------
@@ -399,7 +626,7 @@ export function describeTile(game, a, x, y) {
   const t = game.tiles[i];
   const c = game.plan.currency;
   const terrain = ['Grassland', 'Water', 'Forest', 'Beach'][game.terrain[i]] || 'Land';
-  if (!t) return { title: terrain, lines: [game.terrain[i] === 2 ? 'Building here clears the trees.' : 'Empty land.'] };
+  if (!t) return { title: terrain, lines: [game.terrain[i] === 2 ? 'Building here clears the trees.' : game.terrain[i] === 1 ? 'Only roads can bridge water.' : 'Empty land, ready to build.'] };
   const def = game.defs[t.d];
   const lines = [];
   if (def.category === 'road') {
@@ -415,7 +642,7 @@ export function describeTile(game, a, x, y) {
     lines.push(`😊 Happiness ${Math.round(a.happinessTile[i])}%`);
   }
   if (def.jobs) lines.push(`💼 ${def.jobs} jobs`);
-  if (def.tourism) lines.push(`🎟️ Tourism income`);
+  if (def.tourism) lines.push('🎟️ Tourism income');
   if (def.category !== 'park' && a.access[i] < 0) lines.push('⚠️ Needs a road connected to the highway');
   if (def.residents) {
     const services = [a.health[i] ? '🏥' : null, a.safety[i] ? '🚓' : null, a.education[i] ? '🏫' : null].filter(Boolean).join(' ');
@@ -429,9 +656,10 @@ export function describeTile(game, a, x, y) {
 
 export function renderInspector(container, info, onClose) {
   container.hidden = false;
-  setChildren(container,
-    el('button', { type: 'button', class: 'icon-btn close', 'aria-label': 'Close', onclick: onClose }, '✕'),
-    el('strong', {}, info.title),
+  setChildren(
+    container,
+    el('button', { type: 'button', class: 'icon-btn inspector-close', 'aria-label': 'Close', onclick: onClose }, icon('close', { size: 18 })),
+    el('div', { class: 'inspector-title' }, info.title),
     info.description ? el('p', { class: 'muted small' }, info.description) : null,
     el('ul', {}, ...info.lines.map((l) => el('li', {}, l))),
   );
@@ -440,24 +668,56 @@ export function renderInspector(container, info, onClose) {
 export function showTooltip(tooltip, x, y, title, lines) {
   tooltip.hidden = false;
   setChildren(tooltip, el('strong', {}, title), ...lines.map((l) => el('div', {}, l)));
-  const pad = 14;
+  const pad = 16;
   const parent = tooltip.parentElement.getBoundingClientRect();
   const w = tooltip.offsetWidth;
   const h = tooltip.offsetHeight;
-  tooltip.style.left = `${Math.min(parent.width - w - 6, x + pad)}px`;
-  tooltip.style.top = `${Math.min(parent.height - h - 6, y + pad)}px`;
+  tooltip.style.left = `${Math.max(6, Math.min(parent.width - w - 6, x + pad))}px`;
+  tooltip.style.top = `${Math.max(6, Math.min(parent.height - h - 6, y + pad))}px`;
 }
 
 // --- toasts ----------------------------------------------------------------
 
-export function toast(text, kind = 'info', ms = 4200) {
+const TOAST_ICONS = { info: 'info', success: 'check', warn: 'warn', event: 'zap' };
+
+export function dismissToast(node) {
+  if (!node?.isConnected || node.classList.contains('leaving')) return;
+  clearTimeout(node._timer);
+  node.classList.add('leaving');
+  setTimeout(() => node.remove(), 300);
+}
+
+/**
+ * Shows a short message. `action` adds a button ({ label, onClick }); toasts
+ * with the same `key` replace each other (used for the single Undo toast).
+ */
+export function toast(text, kind = 'info', ms = 4200, { action, key } = {}) {
   const container = $('toasts');
-  if (!container) return;
-  const node = el('div', { class: `toast toast-${kind}`, role: 'status' }, text);
+  if (!container) return null;
+  if (key) for (const old of container.querySelectorAll('.toast')) if (old.dataset.key === key) old.remove();
+  const node = el(
+    'div',
+    { class: `toast toast-${kind}`, role: 'status', dataset: key ? { key } : undefined },
+    el('span', { class: 'toast-icon' }, icon(TOAST_ICONS[kind] || 'info', { size: 16 })),
+    el('span', { class: 'toast-text' }, text),
+    action
+      ? el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-ghost btn-sm toast-action',
+            onclick: () => {
+              dismissToast(node);
+              action.onClick();
+            },
+          },
+          action.label,
+        )
+      : null,
+  );
   container.append(node);
-  while (container.children.length > 4) container.firstChild.remove();
-  setTimeout(() => {
-    node.classList.add('leaving');
-    setTimeout(() => node.remove(), 400);
-  }, ms);
+  const max = window.matchMedia('(min-width: 1024px)').matches ? 4 : 3;
+  while (container.children.length > max) container.firstElementChild.remove();
+  node._timer = setTimeout(() => dismissToast(node), ms);
+  return node;
 }

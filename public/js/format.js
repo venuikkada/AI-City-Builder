@@ -27,4 +27,14 @@ export function formatNumber(value) {
   return n.toLocaleString('en-US');
 }
 
+/** Short form for tight spaces like the phone HUD: 9,999 · 12.3k · 456k · 1.23M. */
+export function formatCompact(value) {
+  const n = Math.round(value);
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e5) return `${Math.round(n / 1e3)}k`;
+  if (abs >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
+  return n.toLocaleString('en-US');
+}
+
 export const percent = (fraction) => `${Math.round(fraction * 100)}%`;

@@ -1,7 +1,10 @@
 // Mouse, touch and keyboard controls.
-// Inspect tool: drag pans, click inspects. Build tools: drag paints (roads in a
-// line, zones in a rectangle). Right/middle drag or two fingers always pan;
-// wheel or pinch zooms.
+// Touch: one finger pans, a tap acts (inspect, place, or mark the ends of a
+// road or zone), two fingers pinch-zoom. Mouse and pen: with a build tool, drag
+// paints (roads in a line, zones in a rectangle); with Explore, drag pans and a
+// click inspects. Right/middle drag always pans; the wheel zooms.
+
+const TAP_SLOP = { touch: 12, mouse: 5 }; // px a pointer may wander and still count as a tap
 
 export class Input {
   constructor(canvas, renderer, handlers) {
@@ -30,9 +33,11 @@ export class Input {
   }
 
   onDown(e) {
+    if (!this.h.isActive()) return;
     this.canvas.setPointerCapture?.(e.pointerId);
     const [x, y] = this.local(e);
     this.pointers.set(e.pointerId, { x, y });
+    this.h.onPointerType?.(e.pointerType);
     if (this.pointers.size === 2) {
       // Second finger: switch to pinch/pan and drop any half-finished build drag.
       if (this.drag?.mode === 'build') this.h.onBuildCancel();
@@ -42,10 +47,11 @@ export class Input {
       return;
     }
     if (this.pointers.size > 2) return;
+    const touch = e.pointerType === 'touch';
     const panOnly = e.button === 1 || e.button === 2;
     const tile = this.renderer.screenToTile(x, y);
-    if (panOnly || this.h.getTool() === 'inspect' || !tile) {
-      this.drag = { mode: 'pan', lastX: x, lastY: y, startX: x, startY: y, moved: false, button: e.button, tile };
+    if (touch || panOnly || this.h.getTool() === 'inspect' || !tile) {
+      this.drag = { mode: 'pan', lastX: x, lastY: y, startX: x, startY: y, moved: false, button: e.button, tile, touch };
       return;
     }
     this.drag = { mode: 'build', start: tile, end: tile };
@@ -67,23 +73,33 @@ export class Input {
       return;
     }
 
-    if (this.drag?.mode === 'pan') {
-      this.renderer.pan(x - this.drag.lastX, y - this.drag.lastY);
-      this.drag.lastX = x;
-      this.drag.lastY = y;
-      if (Math.hypot(x - this.drag.startX, y - this.drag.startY) > 5) this.drag.moved = true;
-    } else if (this.drag?.mode === 'build') {
+    const drag = this.drag;
+    if (drag?.mode === 'pan' && this.pointers.has(e.pointerId)) {
+      if (!drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > (drag.touch ? TAP_SLOP.touch : TAP_SLOP.mouse)) {
+        drag.moved = true;
+        this.h.onPanStart?.();
+      }
+      // Hold still until the finger has clearly moved, so taps don't nudge the map.
+      if (drag.moved || !drag.touch) {
+        this.renderer.pan(x - drag.lastX, y - drag.lastY);
+        drag.lastX = x;
+        drag.lastY = y;
+      }
+    } else if (drag?.mode === 'build') {
       const tile = this.renderer.screenToTile(x, y);
-      if (tile && (tile.x !== this.drag.end.x || tile.y !== this.drag.end.y)) {
-        this.drag.end = tile;
-        this.h.onBuildPreview(this.drag.start, tile);
+      if (tile && (tile.x !== drag.end.x || tile.y !== drag.end.y)) {
+        drag.end = tile;
+        this.h.onBuildPreview(drag.start, tile);
       }
     }
-    if (e.pointerType === 'mouse') this.h.onHover(this.renderer.screenToTile(x, y), x, y);
+    if (e.pointerType === 'mouse') {
+      this.h.onPointerType?.('mouse');
+      this.h.onHover(this.renderer.screenToTile(x, y), x, y);
+    }
   }
 
   onUp(e, cancelled = false) {
-    this.pointers.delete(e.pointerId);
+    if (!this.pointers.delete(e.pointerId)) return;
     if (this.pinch) {
       if (this.pointers.size < 2) this.pinch = null;
       return;
@@ -91,7 +107,9 @@ export class Input {
     const drag = this.drag;
     this.drag = null;
     if (!drag) return;
-    if (drag.mode === 'pan' && !drag.moved && !cancelled && drag.button === 0 && drag.tile) this.h.onClick(drag.tile);
+    if (drag.mode === 'pan' && !drag.moved && !cancelled && drag.button === 0 && drag.tile) {
+      this.h.onTap(drag.tile, drag.touch ? 'touch' : 'mouse');
+    }
     if (drag.mode === 'build') {
       if (cancelled) this.h.onBuildCancel();
       else this.h.onBuildCommit(drag.start, drag.end);
@@ -108,8 +126,15 @@ export class Input {
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
     if (!this.h.isActive()) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      this.h.onUndo();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const step = 60;
     const r = this.renderer;
+    const [cx, cy] = r.viewCenter();
     switch (e.key) {
       case 'ArrowUp':
       case 'w':
@@ -129,11 +154,11 @@ export class Input {
         break;
       case '+':
       case '=':
-        r.zoomAt(1.2, r.width / 2, r.height / 2);
+        r.zoomAt(1.2, cx, cy);
         break;
       case '-':
       case '_':
-        r.zoomAt(1 / 1.2, r.width / 2, r.height / 2);
+        r.zoomAt(1 / 1.2, cx, cy);
         break;
       case 'Escape':
         this.h.onEscape();
@@ -141,6 +166,7 @@ export class Input {
       case ' ':
         if (!e.repeat) this.h.onTogglePause();
         break;
+      case '0':
       case '1':
       case '2':
       case '3':

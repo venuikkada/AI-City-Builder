@@ -24,6 +24,8 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
   '.txt': 'text/plain; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.woff2': 'font/woff2',
 };
 
 const SECURITY_HEADERS = {

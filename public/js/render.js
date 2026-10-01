@@ -113,13 +113,17 @@ function tree(ctx, x, y, s, color) {
 }
 
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, { maxDpr = 2 } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.camera = { x: 0, y: 0, zoom: 1 };
     this.width = 1;
     this.height = 1;
     this.dpr = 1;
+    this.maxDpr = maxDpr;
+    // Screen space covered by HUD bars and panels; the camera centres on what's left.
+    this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
+    this.stars = null;
     this.overlay = 'none';
     this.hover = null; // { x, y }
     this.ghost = null; // { def, ok }
@@ -142,30 +146,49 @@ export class Renderer {
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.dpr = Math.min(this.maxDpr, window.devicePixelRatio || 1);
     this.width = Math.max(1, rect.width);
     this.height = Math.max(1, rect.height);
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
   }
 
+  /** Ignores insets that would leave too little of the map visible. */
+  setInsets({ top = 0, right = 0, bottom = 0, left = 0 } = {}) {
+    const usable = this.width - left - right > this.width * 0.3 && this.height - top - bottom > this.height * 0.3;
+    this.insets = usable ? { top, right, bottom, left } : { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+
+  /** Screen point the camera looks at: the middle of the uncovered area. */
+  viewCenter() {
+    const { top, right, bottom, left } = this.insets;
+    return [left + (this.width - left - right) / 2, top + (this.height - top - bottom) / 2];
+  }
+
   /** Starts zoomed in on the middle of the highway, close enough to see buildings. */
   fitToMap() {
     const size = this.state.size;
-    const fit = Math.min(this.width / (size * TILE_W), this.height / (size * TILE_H + 120)) * 1.05;
+    const { top, right, bottom, left } = this.insets;
+    const w = this.width - left - right;
+    const h = this.height - top - bottom;
+    const fit = Math.min(w / (size * TILE_W), h / (size * TILE_H + 120)) * 1.05;
     this.camera.x = 0;
     this.camera.y = size * HH + 20;
-    this.camera.zoom = clamp(fit * 1.9, 0.45, 1.15);
+    // Phones (either orientation) start closer in so tiles are big enough to tap.
+    const phone = Math.min(this.width, this.height) < 500;
+    this.camera.zoom = clamp(Math.max(fit * 1.9, phone ? Math.min(w, h * 2) / 480 : 0), 0.45, 1.15);
   }
 
   screenToWorld(sx, sy) {
     const z = this.camera.zoom;
-    return [(sx - this.width / 2) / z + this.camera.x, (sy - this.height / 2) / z + this.camera.y];
+    const [cx, cy] = this.viewCenter();
+    return [(sx - cx) / z + this.camera.x, (sy - cy) / z + this.camera.y];
   }
 
   worldToScreen(wx, wy) {
     const z = this.camera.zoom;
-    return [(wx - this.camera.x) * z + this.width / 2, (wy - this.camera.y) * z + this.height / 2];
+    const [cx, cy] = this.viewCenter();
+    return [(wx - this.camera.x) * z + cx, (wy - this.camera.y) * z + cy];
   }
 
   tileToScreen(x, y) {
@@ -213,13 +236,15 @@ export class Renderer {
     sky.addColorStop(1, P.skyBottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.setTransform(this.dpr * z, 0, 0, this.dpr * z, this.dpr * (this.width / 2 - camera.x * z), this.dpr * (this.height / 2 - camera.y * z));
+    if (P.night) this.drawStars();
+    const [cx, cy] = this.viewCenter();
+    ctx.setTransform(this.dpr * z, 0, 0, this.dpr * z, this.dpr * (cx - camera.x * z), this.dpr * (cy - camera.y * z));
 
     const view = {
-      left: camera.x - this.width / 2 / z - HW,
-      right: camera.x + this.width / 2 / z + HW,
-      top: camera.y - this.height / 2 / z - TILE_H,
-      bottom: camera.y + this.height / 2 / z + MAX_BUILDING_HEIGHT,
+      left: camera.x - cx / z - HW,
+      right: camera.x + (this.width - cx) / z + HW,
+      top: camera.y - cy / z - TILE_H,
+      bottom: camera.y + (this.height - cy) / z + MAX_BUILDING_HEIGHT,
     };
     const size = state.size;
     const visible = (x, y) => {
@@ -259,6 +284,23 @@ export class Renderer {
     }
     this.drawMarkers(analysis, visible);
     this.drawGhost();
+  }
+
+  /** Twinkling stars for night skies (screen space, behind the map). */
+  drawStars() {
+    const { ctx } = this;
+    if (!this.stars) {
+      this.stars = Array.from({ length: 110 }, (_, k) => {
+        const h = tileHash(k, k * 7 + 3);
+        return { x: (h % 1000) / 1000, y: ((h >>> 10) % 1000) / 1000, s: 0.6 + ((h >>> 20) % 10) / 9, p: (h % 628) / 100 };
+      });
+    }
+    for (const star of this.stars) {
+      ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(this.time * (0.6 + star.s * 0.5) + star.p));
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(star.x * this.width, star.y * this.height * 0.75, star.s, star.s);
+    }
+    ctx.globalAlpha = 1;
   }
 
   drawSlab() {

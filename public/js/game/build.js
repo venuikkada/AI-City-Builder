@@ -135,19 +135,48 @@ export function previewMany(state, cells, defId) {
   return { results, total, count };
 }
 
-/** Applies a tool to many tiles in order, stopping quietly where it can't build. */
+/**
+ * Applies a tool to many tiles in order, stopping quietly where it can't build.
+ * Also returns an `undo` record (see undoBuild) when anything changed.
+ */
 export function applyMany(state, cells, defId) {
   let spent = 0;
   let count = 0;
   let lastError = null;
+  const changes = [];
+  const moneyBefore = state.money;
   for (const [x, y] of cells) {
+    if (!inBounds(state, x, y)) {
+      lastError = 'Outside the map';
+      continue;
+    }
+    const i = y * state.size + x;
+    const before = { i, tile: state.tiles[i], terrain: state.terrain[i] };
     const r = defId === 'bulldoze' ? bulldoze(state, x, y) : placeBuilding(state, x, y, defId);
     if (r.ok) {
       spent += (r.cost || 0) - (r.refund || 0);
       count += 1;
+      changes.push(before);
     } else {
       lastError = r.reason;
     }
   }
-  return { spent, count, lastError };
+  const undo = count ? { month: state.month, changes, delta: state.money - moneyBefore } : null;
+  return { spent, count, lastError, undo };
+}
+
+/**
+ * Reverts an applyMany action. Only allowed in the same month, so undo can't be
+ * used to collect a mission reward and then get the building's price back.
+ */
+export function undoBuild(state, undo) {
+  if (!undo || undo.month !== state.month) return false;
+  for (let k = undo.changes.length - 1; k >= 0; k--) {
+    const { i, tile, terrain } = undo.changes[k];
+    state.tiles[i] = tile;
+    state.terrain[i] = terrain;
+  }
+  state.money -= undo.delta;
+  state.analysis = null;
+  return true;
 }

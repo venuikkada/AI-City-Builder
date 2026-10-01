@@ -8,136 +8,216 @@
     <meta property="og:title" content="AI City Builder" />
     <meta property="og:description" content="Describe your dream city. AI plans it. You build it." />
     <meta property="og:type" content="website" />
-    <meta name="theme-color" content="#0d1117" />
+    <meta name="theme-color" content="#070b18" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="preload" href="fonts/baloo-2-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="app" data-screen="start">
-      <section class="screen start" id="screen-start">
-        <div class="start-skyline" aria-hidden="true"></div>
-        <main class="start-card">
-          <div class="brand"><span class="brand-mark">🏙️</span> AI City Builder</div>
-          <h1 class="hero">Describe your dream city.<br /><span class="accent">AI plans it. You build it.</span></h1>
-          <p class="sub">
-            A real city reimagined, a fantasy town, a car-free utopia — type anything. The AI designs the buildings, landmarks and missions.
-            You lay the roads and manage money, traffic and population.
-          </p>
+      <canvas id="bg-canvas" class="bg-canvas" aria-hidden="true"></canvas>
+      <div class="bg-shade" aria-hidden="true"></div>
+
+      <!-- Start -->
+      <section class="screen screen-start" id="screen-start">
+        <div class="start-panel glass">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>AI City Builder</span>
+          </div>
+          <h1 class="hero">Describe your dream city. <span class="hero-accent">AI plans it. You build it.</span></h1>
           <form id="prompt-form" class="prompt-form" autocomplete="off">
             <label class="sr-only" for="prompt-input">Describe your city</label>
-            <textarea id="prompt-input" name="prompt" rows="3" maxlength="300" placeholder="Build a futuristic Hyderabad."></textarea>
-            <div class="chips" id="prompt-chips" aria-label="Example ideas"></div>
-            <div class="form-row">
-              <fieldset class="difficulty">
-                <legend class="sr-only">Difficulty</legend>
-                <label><input type="radio" name="difficulty" value="relaxed" /> <span>Relaxed</span></label>
-                <label><input type="radio" name="difficulty" value="normal" checked /> <span>Normal</span></label>
-                <label><input type="radio" name="difficulty" value="hard" /> <span>Hard</span></label>
-              </fieldset>
-              <button class="btn btn-primary btn-lg" type="submit">✨ Generate my city</button>
+            <div class="prompt-box">
+              <span class="prompt-icon" data-icon="sparkles" aria-hidden="true"></span>
+              <textarea id="prompt-input" name="prompt" rows="2" maxlength="300" placeholder="Build a futuristic Hyderabad."></textarea>
             </div>
+            <div class="chips" id="prompt-chips" aria-label="Example ideas"></div>
+            <fieldset class="segmented" id="difficulty">
+              <legend class="sr-only">Difficulty</legend>
+              <label><input type="radio" name="difficulty" value="relaxed" /><span>Relaxed</span></label>
+              <label><input type="radio" name="difficulty" value="normal" checked /><span>Normal</span></label>
+              <label><input type="radio" name="difficulty" value="hard" /><span>Hard</span></label>
+            </fieldset>
+            <button class="btn btn-primary btn-xl" id="generate-btn" type="submit"><span data-icon="sparkles"></span>Generate my city</button>
           </form>
           <div class="start-footer">
             <span id="ai-status" class="ai-status">Checking AI…</span>
-            <button id="continue-btn" class="btn btn-ghost" type="button" hidden></button>
+            <button id="continue-btn" class="btn btn-ghost btn-sm" type="button" hidden></button>
           </div>
-        </main>
-      </section>
-
-      <section class="screen loading" id="screen-loading" hidden>
-        <div class="loader-card">
-          <div class="crane" aria-hidden="true"><span>🏗️</span></div>
-          <h2 id="loading-title">Designing your city…</h2>
-          <p id="loading-line" class="loading-line" aria-live="polite"></p>
-          <button id="loading-skip" class="btn btn-ghost" type="button" hidden>Skip — use the quick offline planner</button>
         </div>
       </section>
 
-      <section class="screen reveal" id="screen-reveal" hidden>
-        <div class="reveal-card">
-          <div class="reveal-head">
-            <div class="badges"><span class="badge" id="reveal-source"></span><span class="badge" id="reveal-style"></span></div>
-            <h1 id="reveal-name"></h1>
-            <p class="tagline" id="reveal-tagline"></p>
-            <p class="vision" id="reveal-vision"></p>
-            <p class="notice" id="reveal-notice" hidden></p>
-          </div>
-          <div class="reveal-grid">
-            <section>
+      <!-- Loading -->
+      <section class="screen screen-loading" id="screen-loading" hidden>
+        <div class="loading-panel glass">
+          <div class="rising-skyline" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <h2 id="loading-title">Designing your city…</h2>
+          <p class="loading-prompt" id="loading-prompt"></p>
+          <ol class="loading-steps" id="loading-steps"></ol>
+          <button id="loading-skip" class="btn btn-ghost btn-sm" type="button" hidden>Skip and use the quick offline planner</button>
+        </div>
+      </section>
+
+      <!-- Plan reveal -->
+      <section class="screen screen-reveal" id="screen-reveal" hidden>
+        <div class="reveal-scroll">
+          <div class="reveal-panel glass">
+            <header class="reveal-head">
+              <div class="badges"><span class="badge" id="reveal-source"></span><span class="badge" id="reveal-style"></span></div>
+              <h1 id="reveal-name"></h1>
+              <p class="tagline" id="reveal-tagline"></p>
+              <p class="vision" id="reveal-vision"></p>
+              <p class="notice" id="reveal-notice" hidden></p>
+            </header>
+            <section class="reveal-block">
               <h3>Landmarks</h3>
-              <ul class="landmark-list" id="reveal-landmarks"></ul>
+              <ul class="landmark-row" id="reveal-landmarks"></ul>
             </section>
-            <section>
-              <h3>Missions</h3>
-              <ol class="mission-preview" id="reveal-missions"></ol>
+            <section class="reveal-block">
+              <h3>Story missions</h3>
+              <ol class="timeline" id="reveal-missions"></ol>
             </section>
-            <section class="wide">
-              <h3>Your building palette</h3>
+            <section class="reveal-block">
+              <h3>Your buildings</h3>
               <ul class="building-chips" id="reveal-buildings"></ul>
             </section>
           </div>
-          <div class="reveal-actions">
-            <button class="btn btn-ghost" id="reveal-back" type="button">← Change idea</button>
-            <button class="btn btn-ghost" id="reveal-regen" type="button">🎲 Regenerate</button>
-            <button class="btn btn-primary btn-lg" id="reveal-start" type="button">Start building →</button>
-          </div>
+        </div>
+        <div class="reveal-actions glass">
+          <button class="btn btn-ghost btn-square" id="reveal-back" type="button" aria-label="Change idea"><span data-icon="back"></span></button>
+          <button class="btn btn-ghost" id="reveal-regen" type="button"><span data-icon="dice"></span>Regenerate</button>
+          <button class="btn btn-primary btn-lg" id="reveal-start" type="button">Start building<span data-icon="chevron"></span></button>
         </div>
       </section>
 
-      <section class="screen game" id="screen-game" hidden>
-        <header class="hud">
+      <!-- Game -->
+      <section class="screen screen-game" id="screen-game" hidden>
+        <canvas id="city-canvas" aria-label="City map"></canvas>
+
+        <header class="hud glass" id="hud">
           <div class="hud-city">
             <div class="city-name" id="hud-name"></div>
-            <div class="city-sub"><span id="hud-milestone"></span> · <span id="hud-date"></span></div>
+            <div class="city-sub"><span id="hud-milestone"></span><span class="dot-sep" aria-hidden="true">·</span><span id="hud-date"></span></div>
           </div>
           <div class="hud-stats">
-            <button class="stat" id="stat-money" type="button" title="Treasury and monthly profit — click for the budget">
-              <span class="stat-icon">💰</span><span class="stat-value" id="hud-money"></span><span class="stat-delta" id="hud-net"></span>
+            <button class="stat stat-money" id="stat-money" type="button" title="Treasury and monthly profit (opens the budget)">
+              <span class="stat-main"><span class="stat-icon" data-icon="money" data-size="16"></span><span class="stat-value" id="hud-money"></span></span>
+              <span class="stat-sub" id="hud-net"></span>
             </button>
-            <div class="stat" title="Population"><span class="stat-icon">👥</span><span class="stat-value" id="hud-pop"></span></div>
-            <div class="stat" title="Jobs"><span class="stat-icon">💼</span><span class="stat-value" id="hud-jobs"></span></div>
-            <div class="stat" title="Happiness"><span class="stat-icon" id="hud-happy-icon">🙂</span><span class="stat-value" id="hud-happy"></span></div>
-            <div class="stat stat-traffic" title="Traffic congestion"><span class="stat-icon">🚗</span><span class="stat-value" id="hud-traffic"></span></div>
+            <button class="stat" id="stat-pop" type="button" title="Population (opens the budget)">
+              <span class="stat-main"><span class="stat-icon" data-icon="people" data-size="16"></span><span class="stat-value" id="hud-pop"></span></span>
+              <span class="stat-sub">people</span>
+            </button>
+            <button class="stat" id="stat-jobs" type="button" title="Jobs (opens the budget)">
+              <span class="stat-main"><span class="stat-icon" data-icon="jobs" data-size="16"></span><span class="stat-value" id="hud-jobs"></span></span>
+              <span class="stat-sub">jobs</span>
+            </button>
+            <button class="stat" id="stat-happy" type="button" title="Happiness (shows the happiness map)">
+              <span class="stat-main"><span class="stat-icon" id="hud-happy-icon"></span><span class="stat-value" id="hud-happy"></span></span>
+              <span class="stat-sub">happy</span>
+            </button>
+            <button class="stat" id="stat-traffic" type="button" title="Traffic congestion (shows the traffic map)">
+              <span class="stat-main"><span class="stat-icon" data-icon="traffic" data-size="16"></span><span class="stat-value" id="hud-traffic"></span></span>
+              <span class="stat-sub">traffic</span>
+            </button>
           </div>
           <div class="hud-controls">
             <div class="speed" role="group" aria-label="Game speed">
-              <button type="button" data-speed="0" title="Pause (Space)">⏸</button>
-              <button type="button" data-speed="1" title="Normal speed (1)">▶</button>
-              <button type="button" data-speed="2" title="Fast (2)">⏩</button>
-              <button type="button" data-speed="3" title="Fastest (3)">⏭</button>
+              <button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause"><span data-icon="pause" data-size="18"></span></button>
+              <button type="button" data-speed="1" title="Normal speed (1)" aria-label="Normal speed"><span data-icon="play" data-size="18"></span></button>
+              <button type="button" data-speed="2" title="Fast (2)" aria-label="Fast"><span data-icon="fast" data-size="18"></span></button>
+              <button type="button" data-speed="3" title="Fastest (3)" aria-label="Fastest"><span data-icon="fastest" data-size="18"></span></button>
             </div>
-            <button class="icon-btn" id="btn-snapshot" type="button" title="Save a shareable snapshot">📸</button>
-            <button class="icon-btn" id="btn-menu" type="button" title="Menu">☰</button>
+            <button class="icon-btn speed-cycle" id="speed-cycle" type="button" aria-label="Change game speed"></button>
+            <button class="icon-btn hide-mobile" id="btn-snapshot" type="button" title="Save a shareable snapshot" aria-label="Snapshot"><span data-icon="camera"></span></button>
+            <button class="icon-btn" id="btn-menu" type="button" title="Menu" aria-label="Menu"><span data-icon="menu"></span></button>
           </div>
         </header>
-        <div class="game-body">
-          <nav class="toolbar" id="toolbar" aria-label="Build tools"></nav>
-          <div class="viewport" id="viewport">
-            <canvas id="city-canvas" aria-label="City map"></canvas>
-            <div class="tooltip" id="tooltip" hidden></div>
-            <div class="toasts" id="toasts" aria-live="polite"></div>
-            <div class="overlay-bar" id="overlay-bar" role="group" aria-label="Map overlays">
-              <button type="button" data-overlay="traffic">🚦 Traffic</button>
-              <button type="button" data-overlay="happiness">😊 Happiness</button>
-              <button type="button" data-overlay="pollution">🏭 Pollution</button>
-              <button type="button" data-overlay="services">🏥 Services</button>
-              <button type="button" data-overlay="transit">🚇 Transit</button>
-            </div>
-            <button class="sheet-toggle" id="sheet-toggle" type="button">📋 Missions</button>
+
+        <aside class="panel build-panel glass" id="build-panel" aria-label="Build menu">
+          <div class="sheet-grip" aria-hidden="true"></div>
+          <div class="panel-head">
+            <h2>Build</h2>
+            <button class="icon-btn sheet-close" type="button" data-close-sheet aria-label="Close"><span data-icon="close"></span></button>
           </div>
-          <aside class="sidebar" id="sidebar">
-            <div class="inspector" id="inspector" hidden></div>
-            <div class="tabs" role="tablist">
-              <button type="button" role="tab" data-tab="missions" class="active" aria-selected="true">🏆 Missions</button>
-              <button type="button" role="tab" data-tab="advisor" aria-selected="false">💬 Advisor</button>
-              <button type="button" role="tab" data-tab="budget" aria-selected="false">📊 Budget</button>
-            </div>
-            <div class="tab-panel" id="panel-missions" role="tabpanel"></div>
-            <div class="tab-panel" id="panel-advisor" role="tabpanel" hidden></div>
-            <div class="tab-panel" id="panel-budget" role="tabpanel" hidden></div>
-          </aside>
+          <div class="mode-row hide-mobile">
+            <button class="mode-btn" type="button" data-tool-btn="inspect"><span data-icon="inspect" data-size="18"></span>Explore</button>
+            <button class="mode-btn" type="button" data-tool-btn="bulldoze"><span data-icon="bulldoze" data-size="18"></span>Clear</button>
+          </div>
+          <div class="category-tabs" id="category-tabs" role="tablist" aria-label="Building categories"></div>
+          <div class="tool-grid" id="tool-grid"></div>
+          <div class="tool-info hide-mobile" id="tool-info"></div>
+        </aside>
+
+        <aside class="panel info-panel glass" id="info-panel" aria-label="City information">
+          <div class="sheet-grip" aria-hidden="true"></div>
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" data-tab="missions" class="active" aria-selected="true"><span data-icon="missions" data-size="18"></span>Missions<span class="tab-badge" id="missions-badge" hidden></span></button>
+            <button type="button" role="tab" data-tab="advisor" aria-selected="false"><span data-icon="advisor" data-size="18"></span>Advisor</button>
+            <button type="button" role="tab" data-tab="budget" aria-selected="false"><span data-icon="budget" data-size="18"></span>Budget</button>
+            <button class="icon-btn sheet-close" type="button" data-close-sheet aria-label="Close"><span data-icon="close"></span></button>
+          </div>
+          <div class="tab-panel" id="panel-missions" role="tabpanel"></div>
+          <div class="tab-panel" id="panel-advisor" role="tabpanel" hidden></div>
+          <div class="tab-panel" id="panel-budget" role="tabpanel" hidden></div>
+        </aside>
+
+        <div class="map-controls" id="map-controls">
+          <button class="fab show-mobile" type="button" data-open-tab="missions" aria-label="Missions"><span data-icon="missions"></span><span class="fab-badge" id="fab-missions-badge" hidden></span></button>
+          <button class="fab show-mobile" type="button" data-open-tab="advisor" aria-label="Advisor"><span data-icon="advisor"></span><span class="fab-dot" id="fab-advisor-dot" hidden></span></button>
+          <button class="fab show-mobile" type="button" data-open-tab="budget" aria-label="Budget"><span data-icon="budget"></span></button>
+          <button class="fab" type="button" id="btn-layers" aria-label="Map layers" aria-expanded="false"><span data-icon="layers"></span></button>
+          <button class="fab" type="button" id="btn-recenter" aria-label="Recenter map"><span data-icon="recenter"></span></button>
         </div>
+
+        <div class="layers-pop glass" id="layers-pop" hidden>
+          <div class="layers-title">Map layers</div>
+          <div class="layers-list" id="overlay-bar" role="group" aria-label="Map overlays">
+            <button type="button" data-overlay="none"><span data-icon="city" data-size="18"></span>City</button>
+            <button type="button" data-overlay="traffic"><span data-icon="cone" data-size="18"></span>Traffic</button>
+            <button type="button" data-overlay="happiness"><span data-icon="happy" data-size="18"></span>Happiness</button>
+            <button type="button" data-overlay="pollution"><span data-icon="factory" data-size="18"></span>Pollution</button>
+            <button type="button" data-overlay="services"><span data-icon="health" data-size="18"></span>Services</button>
+            <button type="button" data-overlay="transit"><span data-icon="train" data-size="18"></span>Transit</button>
+          </div>
+          <div class="legend" id="legend"></div>
+        </div>
+
+        <button class="overlay-chip glass" id="overlay-chip" type="button" hidden aria-label="Hide map layer">
+          <span class="overlay-chip-text" id="overlay-chip-text"></span>
+          <span class="legend-scale" id="overlay-chip-scale"></span>
+          <span data-icon="close" data-size="16"></span>
+        </button>
+        <div class="inspector glass" id="inspector" hidden></div>
+        <div class="tooltip" id="tooltip" hidden></div>
+        <div class="toasts" id="toasts" aria-live="polite"></div>
+
+        <div class="confirm-bar glass" id="confirm-bar" hidden>
+          <div class="confirm-text"><strong id="confirm-title"></strong><span id="confirm-detail"></span></div>
+          <button class="btn btn-ghost btn-sm" type="button" id="confirm-cancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" type="button" id="confirm-build"><span data-icon="check" data-size="18"></span>Build</button>
+        </div>
+
+        <nav class="dock glass" id="dock" aria-label="Main actions">
+          <div class="dock-main" id="dock-main">
+            <button class="dock-btn" type="button" data-tool-btn="inspect"><span data-icon="inspect"></span><span>Explore</span></button>
+            <button class="dock-btn dock-build" type="button" id="dock-build"><span data-icon="build" data-size="24"></span><span>Build</span></button>
+            <button class="dock-btn" type="button" data-tool-btn="bulldoze"><span data-icon="bulldoze"></span><span>Clear</span></button>
+          </div>
+          <div class="dock-tool" id="dock-tool" hidden>
+            <span class="dock-tool-icon" id="dock-tool-icon"></span>
+            <span class="dock-tool-text"><strong id="dock-tool-name"></strong><span id="dock-tool-hint"></span></span>
+            <button class="btn btn-ghost btn-sm" type="button" id="dock-tool-change">Change</button>
+            <button class="icon-btn" type="button" id="dock-tool-close" aria-label="Stop building"><span data-icon="close"></span></button>
+          </div>
+        </nav>
+        <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
       </section>
     </div>
 

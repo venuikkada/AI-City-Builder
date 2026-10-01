@@ -10,6 +10,10 @@ Type something like *“Build a futuristic Hyderabad.”* Claude designs the cit
 | --- | --- | --- |
 | ![Start screen](docs/screenshots/start.jpg) | ![AI city plan](docs/screenshots/plan.jpg) | ![Traffic overlay](docs/screenshots/traffic-overlay.jpg) |
 
+**Made for phones too:** a thumb-friendly dock, bottom sheets for building and city info, one-finger panning and tap-to-build.
+
+![The game on a phone: start screen, city view, build menu and missions](docs/screenshots/mobile.jpg)
+
 ## Features
 
 - **Prompt → playable city.** Claude turns any description into a structured city plan. Real places get their own flavour: “futuristic Hyderabad” gives you Hussain Sagar, a Charminar Holo-Arch, HITEC City Data Towers, Biryani Week and an advisor called Nizam-9.
@@ -20,7 +24,9 @@ Type something like *“Build a futuristic Hyderabad.”* Claude designs the cit
   - **Population:** grows when there are homes, jobs and happy residents. Parks, schools, hospitals, police, transit and fair taxes help; pollution, unemployment and traffic hurt.
   - **Money:** comes from resident and business taxes plus landmark tourism. Every building costs upkeep, and bigger cities cost more to run.
 - **Seven visual styles** (futuristic, cyberpunk, green, heritage, coastal, desert, classic) with lakes, rivers or coastlines generated from the plan.
-- **Works everywhere.** Desktop and mobile (touch, pinch-zoom), autosaves in the browser, and 📸 shareable snapshots captioned with your prompt.
+- **Plays great on phones.** A mobile-first layout with a bottom dock, swipeable sheets, one-finger panning, pinch zoom, tap-to-build with a confirm bar for roads and zones, and Undo. On desktop, side panels, drag-to-build and keyboard shortcuts.
+- **Share your city.** 📸 Snapshots are captioned with your city's name, stats and prompt; on phones they open the share sheet (WhatsApp, Instagram and so on). Games autosave in the browser.
+- **A living title screen.** A fully built city drifts behind the start screen and restyles itself when you pick an example (try “Cyberpunk Mumbai”).
 - **Works without an API key.** A built-in offline planner (with flavour packs for 15 cities) steps in whenever Claude isn't configured or available.
 
 ![Neon Mumbai](docs/screenshots/neon-mumbai.jpg)
@@ -43,18 +49,19 @@ Without a key the game still runs, with the offline planner designing the cities
 
 1. Describe a city (or pick an example), choose a difficulty and press **Generate my city**.
 2. Review the AI's plan (landmarks, missions, building names) and press **Start building**.
-3. Drag **streets** off the highway. Buildings only work when a road connects them to the highway (parks excepted).
+3. Build **streets** off the highway. Buildings only work when a road connects them to the highway (parks excepted).
 4. Place **homes**, then **shops and factories** so residents have jobs. Keep factories away from homes.
-5. Watch the stats bar: 💰 money, 👥 population, 💼 jobs, 😊 happiness and 🚗 traffic. Use the overlays (traffic, happiness, pollution, services, transit) to find problems.
+5. Watch the stats bar: money, population, jobs, happiness and traffic. Tap happiness or traffic to see that map layer; the layers button adds pollution, services and transit.
 6. Complete missions for rewards. New buildings, avenues and landmarks unlock as you grow.
 
 | Action | Mouse / keyboard | Touch |
 | --- | --- | --- |
-| Pan | Drag with Inspect tool, right-drag, WASD / arrows | Drag with Inspect tool, two fingers |
+| Pan | Drag with Explore, right-drag, WASD / arrows | One finger |
 | Zoom | Mouse wheel, `+` / `-` | Pinch |
-| Build | Click or drag (roads draw lines, homes/shops/parks fill areas) | Tap or drag |
-| Pause / speed | `Space`, `1`–`3` | Speed buttons |
-| Cancel tool | `Esc` | Inspect tool |
+| Build | Click, or drag (roads draw lines; homes, shops and parks fill areas) | Tap to place. Roads and zones: tap the start, tap the end, then **Build** |
+| Undo the last build | `Ctrl`/`⌘` + `Z`, or **Undo** in the message | **Undo** in the message (same month only) |
+| Pause / speed | `Space`, `0`–`3`, speed buttons | Speed button in the top bar |
+| Cancel tool | `Esc` | ✕ in the bottom bar |
 
 ## How the AI works
 
@@ -108,7 +115,11 @@ public/                 Browser game (plain ES modules, no build step)
   js/shared/            Code shared with the server: building catalog, plan sanitizers, offline planner
   js/game/              Simulation: map & terrain, placement, traffic routing, economy, missions, advisor tips
   js/render.js          Isometric canvas renderer (procedural buildings, cars, overlays)
-  js/main.js, ui.js     Screens, game loop, HUD and panels
+  js/main.js, ui.js     Screens, game loop, HUD, build menu, sheets and panels
+  js/input.js           Mouse, touch and keyboard controls
+  js/demo.js            The living city behind the start screen
+  js/icons.js           UI icons (Lucide)
+  fonts/                Baloo 2 display font (self-hosted)
 server/                 Node HTTP server, Claude integration, prompts and schemas
 scripts/check-ai.js     `npm run check:ai`: verifies your Claude key and model
 test/                   node:test suites (simulation, traffic, sanitizers, AI client, server)
@@ -118,7 +129,7 @@ docs/                   Screenshots and the go-to-market playbook
 ## Development
 
 ```bash
-npm test     # 42 tests: simulation balance, traffic routing, sanitizers, AI client (mocked), HTTP server
+npm test     # 43 tests: simulation balance, traffic routing, undo, sanitizers, AI client (mocked), HTTP server
 npm run dev  # restart the server on file changes
 npm run check:ai  # real Claude calls with your key
 ```
@@ -128,3 +139,8 @@ Open `http://localhost:3000/?debug` to expose `window.aicb` (app state, renderer
 ## Selling it
 
 See **[docs/MARKETING.md](docs/MARKETING.md)** for the go-to-market playbook: positioning, pricing, launch plan, content hooks and B2B/education sales.
+
+## Credits
+
+- [Baloo 2](https://github.com/EkType/Baloo2) by Ek Type, SIL Open Font License 1.1 (`public/fonts/OFL-Baloo2.txt`).
+- Interface icons from [Lucide](https://lucide.dev), ISC License; some derive from Feather, MIT License (`public/js/LICENSE-lucide.txt`).
